@@ -1,0 +1,3241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- iPhone PWA viewport — viewport-fit=cover fills notch/Dynamic Island area -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>Your Travel Food Companion</title>
+
+  <!-- PWA: installable on iPhone home screen -->
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#0b1030"/>
+
+  <!-- iOS-specific PWA tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Food Companion"/>
+  <link rel="apple-touch-icon" href="apple-touch-icon.png"/>
+  <link rel="apple-touch-startup-image" href="apple-touch-icon.png"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* iPhone safe areas — respects notch, Dynamic Island, and home indicator */
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    /* THE SAIGON BACKGROUND — on html, this is the CSS canvas background.
+       It ALWAYS paints to the full viewport, nothing can hide it. */
+    html {
+      min-height: 100%;
+      background:
+        radial-gradient(ellipse 700px 150px at 50% 62%, rgba(230,110,20,0.6) 0%, transparent 70%),
+        radial-gradient(ellipse 350px 90px at 50% 64%, rgba(255,180,50,0.45) 0%, transparent 60%),
+        radial-gradient(ellipse 800px 80px at 50% 78%, rgba(255,160,60,0.25) 0%, transparent 80%),
+        linear-gradient(180deg,
+          #06091a 0%,
+          #0b1030 7%,
+          #180828 14%,
+          #3d0c0c 28%,
+          #7a1a08 40%,
+          #b83810 52%,
+          #d96018 60%,
+          #e88c20 66%,
+          #c07018 72%,
+          #2a1a0a 80%,
+          #140e18 88%,
+          #07070f 100%
+        );
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #333;
+      min-height: 100vh;
+      background: transparent;
+    }
+
+    /* Saigon scene overlay: buildings, river, lanterns — z-index:0, above html bg, below content */
+    #saigon-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    /* All page content must be above the scene */
+    header, .search-panel, .food-info-panel, .main-layout {
+      position: relative;
+      z-index: 1;
+    }
+
+    header {
+      background: linear-gradient(135deg, rgba(139,26,26,0.82), rgba(180,83,9,0.82), rgba(180,130,10,0.82));
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: white;
+      padding: 28px 32px;
+      box-shadow: 0 3px 16px rgba(0,0,0,0.2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::after {
+      content: '✈️ 🍜 🗺️ 🍣 🌮 🍕 🥘 🛫 🌍 🍛 🥢 🍱';
+      position: absolute;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 22px;
+      letter-spacing: 6px;
+      opacity: 0.25;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    header h1 {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
+    header p {
+      font-size: 14px;
+      opacity: 0.85;
+      margin-top: 4px;
+    }
+
+    .search-panel {
+      background: rgba(10,8,30,0.42);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      padding: 20px 32px;
+      border-bottom: 1px solid rgba(255,150,50,0.25);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+      box-shadow: 0 2px 8px rgba(192,93,43,0.07);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,200,120,0.9);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .field input, .field select {
+      padding: 10px 14px;
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+    }
+
+    .field input:focus, .field select:focus {
+      border-color: #ff6b35;
+      background: rgba(255,255,255,0.15);
+    }
+
+    .search-btn {
+      padding: 10px 28px;
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      white-space: nowrap;
+      height: 42px;
+      align-self: flex-end;
+    }
+
+    .search-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .search-btn:active { transform: translateY(0); }
+    .search-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .geo-btn {
+      padding: 10px 16px;
+      background: linear-gradient(135deg, #1a73e8, #0d5bc7);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      white-space: nowrap;
+      height: 42px;
+      align-self: flex-end;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .geo-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .geo-btn:active { transform: translateY(0); }
+    .geo-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .main-layout {
+      display: flex;
+      height: calc(100vh - 210px);
+    }
+
+    .results-panel {
+      width: 420px;
+      min-width: 320px;
+      overflow-y: auto;
+      background: rgba(10,8,30,0.48);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-right: 1px solid rgba(255,150,50,0.2);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .results-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      background: rgba(10,8,30,0.75);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 10;
+    }
+
+    .results-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255,220,150,0.9);
+    }
+
+    .sort-select {
+      font-size: 12px;
+      padding: 4px 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .restaurant-card {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: flex;
+      gap: 14px;
+      background: rgba(255,255,255,0.04);
+      align-items: flex-start;
+    }
+
+    .restaurant-card:hover { background: rgba(255,150,50,0.12); }
+    .restaurant-card.active { background: rgba(255,107,53,0.2); border-left: 3px solid #ff6b35; }
+
+    .rank-badge {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .rank-badge.gold { background: linear-gradient(135deg, #f6c90e, #f7931e); }
+    .rank-badge.silver { background: linear-gradient(135deg, #b0bec5, #78909c); }
+    .rank-badge.bronze { background: linear-gradient(135deg, #cd7f32, #a0522d); }
+
+    .card-info { flex: 1; min-width: 0; }
+
+    .card-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-category {
+      font-size: 12px;
+      color: #999;
+      margin-top: 2px;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .stars {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 13px;
+    }
+
+    .stars .star { color: #f6c90e; }
+    .stars .rating-num { font-weight: 600; color: #333; }
+    .stars .review-count { font-size: 11px; color: #aaa; }
+
+    .price-tag {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+
+    .price-tag.medium { background: #fff8e1; color: #f57c00; }
+    .price-tag.high { background: #fce4ec; color: #c62828; }
+
+    .value-score {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .card-address {
+      font-size: 12px;
+      color: rgba(255,200,150,0.7);
+      margin-top: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-extra-details {
+      font-size: 11px;
+      color: rgba(255,200,150,0.65);
+      margin-top: 4px;
+    }
+    .card-extra-details a { color: #f7931e; text-decoration: none; }
+
+    .card-distance {
+      font-size: 11px;
+      color: #ff6b35;
+      font-weight: 600;
+    }
+
+    #map {
+      flex: 1;
+      background: rgba(20,15,30,0.35);
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      padding: 48px 24px;
+      text-align: center;
+      color: #bbb;
+    }
+
+    .empty-state .icon { font-size: 56px; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 18px; color: rgba(255,220,150,0.9); margin-bottom: 8px; }
+    .empty-state p { font-size: 14px; line-height: 1.6; color: rgba(255,200,150,0.7); }
+
+    .loading-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      padding: 48px;
+      color: #999;
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f0f0f0;
+      border-top: 4px solid #ff6b35;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-banner {
+      margin: 16px 20px;
+      padding: 12px 16px;
+      background: #fce4ec;
+      color: #b71c1c;
+      border-radius: 8px;
+      font-size: 13px;
+      border-left: 4px solid #e53935;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .delivery-section { margin-top: 8px; }
+    .btn-delivery-single {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #ff6b35, #e8920a);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      transition: opacity 0.18s, transform 0.18s;
+    }
+    .btn-delivery-single:hover { opacity: 0.9; transform: translateY(-1px); }
+    /* colours still needed for the order modal app buttons */
+    .btn-delivery { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:20px; font-size:12px; font-weight:600; color:#fff; white-space:nowrap; cursor:pointer; border:none; }
+    .btn-delivery.grabfood  { background: #00b14f; }
+    .btn-delivery.shopeefood{ background: #ee4d2d; }
+    .btn-delivery.baeminvn  { background: #2ac1bc; }
+    .btn-delivery.foodpanda { background: #d70f64; }
+    .btn-delivery.loship    { background: #7b2ff7; }
+
+    /* ── ORDER MODAL ── */
+    .order-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .order-overlay.open { display: flex; }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    .order-sheet {
+      width: 100%; max-width: 520px;
+      background: linear-gradient(170deg, #0f0826, #1a0f38);
+      border-radius: 24px 24px 0 0;
+      padding: 0 0 32px;
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.7);
+      border-top: 1px solid rgba(255,150,50,0.3);
+      animation: slideUp 0.28s ease;
+      overflow: hidden;
+    }
+    .order-handle {
+      width: 36px; height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      margin: 14px auto 0;
+    }
+    /* Restaurant info banner */
+    .order-rest-banner {
+      padding: 14px 20px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.04);
+    }
+    .order-from-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: rgba(255,150,50,0.7);
+      margin-bottom: 4px;
+    }
+    .order-rest-name {
+      font-size: 17px; font-weight: 800; color: #fff;
+      margin-bottom: 4px; line-height: 1.3;
+    }
+    .order-rest-meta {
+      font-size: 12px; color: rgba(255,200,120,0.75);
+      display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    /* App list */
+    .order-apps-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: rgba(255,255,255,0.35);
+      padding: 14px 20px 8px;
+    }
+    .order-apps-list {
+      display: flex; flex-direction: column; gap: 0;
+      padding: 0 14px;
+      margin-bottom: 14px;
+    }
+    .order-app-btn {
+      display: flex; align-items: center; gap: 14px;
+      width: 100%; padding: 13px 14px;
+      border-radius: 14px; border: none; cursor: pointer; color: #fff;
+      font-size: 15px; font-weight: 700;
+      transition: transform 0.15s, filter 0.15s;
+      margin-bottom: 8px;
+      text-align: left;
+    }
+    .order-app-btn:hover  { filter: brightness(1.1); transform: translateY(-1px); }
+    .order-app-btn:active { transform: translateY(0); filter: brightness(0.9); }
+    .order-app-btn.grabfood   { background: linear-gradient(135deg,#00b14f,#008a3e); }
+    .order-app-btn.shopeefood { background: linear-gradient(135deg,#ee4d2d,#c73d22); }
+    .order-app-btn.baeminvn   { background: linear-gradient(135deg,#2ac1bc,#1e9994); }
+    .order-app-btn.foodpanda  { background: linear-gradient(135deg,#d70f64,#a80c4e); }
+    .order-app-btn.loship     { background: linear-gradient(135deg,#7b2ff7,#5e1fc4); }
+    .order-app-btn .app-logo  { font-size: 26px; flex-shrink: 0; }
+    .order-app-btn .app-info  { flex: 1; }
+    .order-app-btn .app-name  { font-size: 15px; font-weight: 800; }
+    .order-app-btn .app-eta   { font-size: 11px; font-weight: 400; opacity: 0.8; margin-top: 1px; }
+    .order-app-btn .app-arrow { font-size: 18px; opacity: 0.7; }
+    .order-cancel-btn {
+      width: 100%; padding: 13px; border-radius: 14px;
+      background: rgba(255,255,255,0.07); border: none;
+      color: rgba(255,255,255,0.5); font-size: 14px; cursor: pointer;
+    }
+    .order-cancel-btn:hover { background: rgba(255,255,255,0.12); }
+
+    /* ── LAUNCH BRIDGE ── */
+    .launch-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 600;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .launch-overlay.open { display: flex; }
+    .launch-card {
+      width: 100%; max-width: 400px;
+      background: linear-gradient(160deg, #0f0826, #1a0f38);
+      border-radius: 24px;
+      padding: 28px 24px 22px;
+      box-shadow: 0 12px 60px rgba(0,0,0,0.8);
+      border: 1px solid rgba(255,150,50,0.2);
+      animation: slideUp 0.25s ease;
+      text-align: center;
+    }
+    .launch-app-logo   { font-size: 52px; margin-bottom: 10px; }
+    .launch-app-name   { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+    .launch-opening    { font-size: 12px; color: rgba(255,200,120,0.6); margin-bottom: 22px; }
+    .launch-divider    { height: 1px; background: rgba(255,255,255,0.07); margin: 0 -4px 18px; }
+    .launch-search-lbl { font-size: 11px; font-weight: 700; letter-spacing: 1px;
+                         text-transform: uppercase; color: rgba(255,150,50,0.7); margin-bottom: 8px; }
+    .launch-rest-name  {
+      font-size: 18px; font-weight: 800; color: #fff;
+      background: rgba(255,255,255,0.07); border-radius: 12px;
+      padding: 12px 16px; margin-bottom: 10px; line-height: 1.3;
+    }
+    .launch-copy-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 20px;
+      background: rgba(255,150,50,0.15); border: 1px solid rgba(255,150,50,0.3);
+      color: rgba(255,200,120,0.9); font-size: 12px; font-weight: 600;
+      cursor: pointer; margin-bottom: 20px;
+      transition: background 0.2s;
+    }
+    .launch-copy-btn:hover { background: rgba(255,150,50,0.25); }
+    .launch-copy-btn.copied { color: #06c167; border-color: #06c167; background: rgba(6,193,103,0.1); }
+    .launch-close-btn {
+      width: 100%; padding: 13px; border-radius: 14px;
+      background: rgba(255,255,255,0.07); border: none;
+      color: rgba(255,255,255,0.45); font-size: 14px; cursor: pointer;
+    }
+    .launch-close-btn:hover { background: rgba(255,255,255,0.12); }
+
+    .btn-menu {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px;
+      background: #ff6b35;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    .btn-menu:hover { opacity: 0.85; }
+
+    .btn-menu.no-site {
+      background: #e0e0e0;
+      color: #999;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    /* Food Info Panel */
+    .food-info-panel {
+      background: rgba(10,8,30,0.78);
+      border-bottom: 2px solid rgba(255,150,50,0.3);
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.4s ease, padding 0.3s ease;
+      padding: 0 32px;
+    }
+
+    .food-info-panel.open {
+      max-height: 420px;
+      padding: 20px 32px;
+    }
+
+    .food-info-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .food-info-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .food-info-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #e65100;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 2px;
+    }
+
+    .food-info-name {
+      font-size: 18px;
+      font-weight: 800;
+      color: #222;
+      margin-bottom: 4px;
+    }
+
+    .food-info-origin {
+      font-size: 12px;
+      color: #888;
+      font-style: italic;
+    }
+
+    .food-info-text {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .ingredient-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 2px;
+    }
+
+    .ingredient-tag {
+      background: #fff3e0;
+      border: 1px solid #ffcc80;
+      color: #e65100;
+      border-radius: 10px;
+      padding: 2px 9px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .health-bar-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .health-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #555;
+    }
+
+    .health-row span:first-child {
+      width: 80px;
+      font-weight: 600;
+      color: #444;
+      flex-shrink: 0;
+    }
+
+    .health-bar {
+      flex: 1;
+      height: 7px;
+      background: #eee;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .health-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    .health-score-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .food-info-close {
+      position: absolute;
+      top: 12px;
+      right: 20px;
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #bbb;
+      line-height: 1;
+    }
+
+    .food-info-close:hover { color: #e65100; }
+
+    .food-info-panel { position: relative; }
+
+    .api-key-notice {
+      background: #fff3e0;
+      border: 1.5px dashed #ffb74d;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 16px 20px;
+      font-size: 13px;
+      color: #e65100;
+    }
+
+    .api-key-notice strong { display: block; margin-bottom: 4px; }
+
+    /* ── Local Specialties Strip ── */
+    #specialtiesPanel {
+      position: relative;
+      z-index: 1;
+      background: rgba(15,8,35,0.52);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,180,60,0.3);
+      padding: 10px 20px 12px;
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .spec-city-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255,200,100,0.85);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .spec-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,150,50,0.3) transparent;
+    }
+
+    .spec-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,160,50,0.3);
+      border-radius: 20px;
+      padding: 5px 13px 5px 10px;
+      font-size: 13px;
+      color: rgba(255,230,180,0.95);
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .spec-chip:hover {
+      background: rgba(255,150,50,0.22);
+      border-color: rgba(255,150,50,0.6);
+    }
+
+    .spec-chip .spec-emoji { font-size: 16px; }
+
+    .spec-chip .spec-desc {
+      font-size: 10px;
+      color: rgba(255,200,130,0.6);
+      display: block;
+      line-height: 1.2;
+    }
+
+    /* ── Destination Explorer Card ── */
+    .dest-header {
+      margin-bottom: 10px;
+    }
+    .dest-flag-city {
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+    .dest-tagline {
+      font-size: 12px;
+      color: rgba(255,210,120,0.85);
+      font-style: italic;
+      margin-top: 2px;
+      margin-bottom: 8px;
+    }
+    .dest-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .dest-badge {
+      background: rgba(255,150,50,0.18);
+      border: 1px solid rgba(255,150,50,0.45);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      color: rgba(255,210,140,0.95);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .dest-info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .dest-info-box {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,180,60,0.2);
+      border-radius: 8px;
+      padding: 8px 12px;
+    }
+    .dest-info-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255,200,100,0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .dest-info-val {
+      font-size: 12px;
+      color: rgba(255,230,180,0.95);
+      line-height: 1.4;
+    }
+    .dest-culture {
+      font-size: 12px;
+      color: rgba(255,220,170,0.82);
+      line-height: 1.55;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.04);
+      border-left: 3px solid rgba(255,150,50,0.5);
+      border-radius: 0 6px 6px 0;
+    }
+    .dest-explore-btn {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      padding: 10px 16px;
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      letter-spacing: 0.2px;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .dest-explore-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .dest-explore-btn:active { transform: translateY(0); }
+
+    .info-window-content { padding: 4px; max-width: 240px; }
+    .info-window-content h4 { font-size: 14px; margin-bottom: 6px; }
+    .info-window-content p { font-size: 12px; color: #666; margin-top: 3px; }
+
+    /* ── iPhone & Mobile Layout ─────────────────────────────────────── */
+    @media (max-width: 700px) {
+
+      /* Header: compact, Dynamic Island safe */
+      header {
+        padding: 8px 16px 10px;
+      }
+      header::after { display: none; }
+      header h1 { font-size: 18px; letter-spacing: 0; }
+      header p  { font-size: 11px; margin-top: 2px; }
+
+      /* Search panel: single-column stack on mobile */
+      .search-panel {
+        padding: 10px 14px;
+        gap: 8px;
+        display: flex;
+        flex-direction: column;
+      }
+      .search-panel .field { min-width: 0; width: 100%; }
+
+      /* CRITICAL: 16px stops iOS Safari auto-zoom on input focus */
+      .field input,
+      .field select {
+        font-size: 16px;
+        padding: 11px 12px;
+        border-radius: 10px;
+      }
+      .field label { font-size: 11px; }
+
+      /* Geo + Search buttons side by side */
+      .mobile-btn-row {
+        display: flex;
+        gap: 8px;
+        width: 100%;
+      }
+      .geo-btn {
+        flex: 0 0 auto;
+        height: 48px;
+        padding: 0 16px;
+        font-size: 15px;
+        border-radius: 12px;
+      }
+      .search-btn {
+        flex: 1;
+        height: 48px;
+        font-size: 16px;
+        border-radius: 12px;
+      }
+
+      /* Specialties strip */
+      #specialtiesPanel { padding: 8px 14px 10px; }
+      .spec-city-label { font-size: 10px; margin-bottom: 6px; }
+      .spec-chip {
+        padding: 8px 12px 8px 8px;
+        min-height: 44px;
+        font-size: 12px;
+      }
+      .spec-chip .spec-emoji { font-size: 18px; }
+
+      /* Destination Explorer card: readable on small screen */
+      .dest-info-grid { grid-template-columns: 1fr; }
+      .dest-explore-btn { font-size: 15px; padding: 12px; }
+
+      /* Food info panel: slides up from bottom */
+      .food-info-panel.open {
+        max-height: 70dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 14px 16px 32px;
+        border-radius: 20px 20px 0 0;
+        bottom: 0; top: auto;
+      }
+      .food-info-inner { grid-template-columns: 1fr; gap: 14px; }
+      .food-info-name  { font-size: 15px; }
+      .food-info-text  { font-size: 12px; }
+      .food-info-close { min-width: 44px; min-height: 44px; top: 8px; right: 8px; }
+
+      /* ── FULL-SCREEN TAB LAYOUT ── */
+      .main-layout {
+        flex-direction: column;
+        /* Fill from below search panel to above bottom tab bar */
+        height: calc(100dvh - var(--top-height, 180px) - 64px - env(safe-area-inset-bottom));
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* Each panel fills the full layout area */
+      .results-panel,
+      #map {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+
+      /* Tab switching: only active panel is visible */
+      .results-panel { display: none; flex-direction: column; }
+      .results-panel.tab-active { display: flex; }
+      #map { display: none; }
+      #map.tab-active { display: block; }
+
+      /* Results */
+      .results-header { padding: 10px 14px; }
+      .results-header h3 { font-size: 12px; }
+      .sort-select { font-size: 13px; }
+
+      .restaurant-card { padding: 12px 14px; gap: 10px; }
+      .card-name    { font-size: 14px; }
+      .card-address { font-size: 11px; }
+      .card-meta    { gap: 6px; }
+
+      .btn-menu {
+        min-height: 40px;
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 10px;
+      }
+
+      .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+      .empty-state h3    { font-size: 15px; }
+      .empty-state p     { font-size: 12px; }
+
+      /* Debug log: smaller on mobile */
+      #debugLog { font-size: 10px !important; max-height: 80px; }
+
+      /* ── BOTTOM TAB BAR ── */
+      .mobile-tabs {
+        display: flex;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        height: calc(64px + env(safe-area-inset-bottom));
+        padding-bottom: env(safe-area-inset-bottom);
+        background: rgba(8, 5, 20, 0.92);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-top: 1px solid rgba(255, 150, 50, 0.25);
+        z-index: 100;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+      }
+      .tab-btn {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        color: rgba(255, 200, 120, 0.5);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: color 0.2s;
+        -webkit-tap-highlight-color: transparent;
+        min-height: 44px;
+      }
+      .tab-btn .tab-icon { font-size: 22px; line-height: 1; }
+      .tab-btn.active {
+        color: #ff6b35;
+      }
+      .tab-btn.active .tab-icon {
+        filter: drop-shadow(0 0 6px rgba(255, 107, 53, 0.6));
+      }
+    }
+
+    /* Hide tab bar on desktop */
+    .mobile-tabs { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- Saigon sunset background — fixed, always behind everything -->
+<div id="saigon-bg">
+  <!-- Bitexco Financial Tower silhouette (center-right) -->
+  <div style="position:absolute;bottom:18%;left:62%;width:28px;height:32vh;background:rgba(5,3,15,0.9);clip-path:polygon(35% 0%,65% 0%,100% 100%,0% 100%);"></div>
+  <div style="position:absolute;bottom:18%;left:61.5%;width:30px;height:12vh;background:rgba(5,3,15,0.9);"></div>
+  <!-- Bitexco helipad arm -->
+  <div style="position:absolute;bottom:calc(18% + 20vh);left:60%;width:40px;height:5px;background:rgba(5,3,15,0.9);"></div>
+  <!-- Notre-Dame Cathedral left spire -->
+  <div style="position:absolute;bottom:18%;left:35%;width:16px;height:18vh;background:rgba(8,5,20,0.85);clip-path:polygon(50% 0%,100% 100%,0% 100%);"></div>
+  <div style="position:absolute;bottom:18%;left:34%;width:18px;height:11vh;background:rgba(8,5,20,0.85);"></div>
+  <!-- Notre-Dame Cathedral right spire -->
+  <div style="position:absolute;bottom:18%;left:38%;width:16px;height:17vh;background:rgba(8,5,20,0.85);clip-path:polygon(50% 0%,100% 100%,0% 100%);"></div>
+  <div style="position:absolute;bottom:18%;left:37%;width:18px;height:10vh;background:rgba(8,5,20,0.85);"></div>
+  <!-- Generic buildings skyline -->
+  <div style="position:absolute;bottom:18%;left:20%;width:40px;height:14vh;background:rgba(6,4,16,0.85);"></div>
+  <div style="position:absolute;bottom:18%;left:22%;width:55px;height:10vh;background:rgba(6,4,16,0.85);"></div>
+  <div style="position:absolute;bottom:18%;left:48%;width:35px;height:16vh;background:rgba(6,4,16,0.85);"></div>
+  <div style="position:absolute;bottom:18%;left:52%;width:28px;height:12vh;background:rgba(6,4,16,0.85);"></div>
+  <div style="position:absolute;bottom:18%;left:70%;width:50px;height:13vh;background:rgba(6,4,16,0.85);"></div>
+  <div style="position:absolute;bottom:18%;left:74%;width:36px;height:9vh;background:rgba(6,4,16,0.85);"></div>
+  <div style="position:absolute;bottom:18%;left:80%;width:60px;height:11vh;background:rgba(6,4,16,0.85);"></div>
+  <div style="position:absolute;bottom:18%;left:10%;width:45px;height:9vh;background:rgba(6,4,16,0.85);"></div>
+  <!-- Saigon River (horizontal band) -->
+  <div style="position:absolute;bottom:14%;left:0;right:0;height:6vh;background:linear-gradient(180deg,rgba(180,90,20,0.35),rgba(100,50,10,0.5));"></div>
+  <!-- Ground -->
+  <div style="position:absolute;bottom:0;left:0;right:0;height:18%;background:rgba(5,3,12,0.92);"></div>
+  <!-- Lanterns (glowing dots along the river) -->
+  <div style="position:absolute;bottom:20%;left:28%;width:10px;height:10px;border-radius:50%;background:rgba(255,200,50,0.85);box-shadow:0 0 14px 6px rgba(255,180,30,0.5);"></div>
+  <div style="position:absolute;bottom:21%;left:42%;width:8px;height:8px;border-radius:50%;background:rgba(255,130,30,0.9);box-shadow:0 0 12px 5px rgba(255,100,20,0.5);"></div>
+  <div style="position:absolute;bottom:20%;left:55%;width:11px;height:11px;border-radius:50%;background:rgba(255,210,60,0.8);box-shadow:0 0 16px 7px rgba(255,190,40,0.5);"></div>
+  <div style="position:absolute;bottom:21%;left:67%;width:9px;height:9px;border-radius:50%;background:rgba(255,160,40,0.85);box-shadow:0 0 12px 5px rgba(255,130,30,0.45);"></div>
+  <!-- Stars in the sky -->
+  <div style="position:absolute;top:5%;left:15%;width:3px;height:3px;border-radius:50%;background:rgba(255,255,220,0.7);"></div>
+  <div style="position:absolute;top:8%;left:25%;width:2px;height:2px;border-radius:50%;background:rgba(255,255,220,0.6);"></div>
+  <div style="position:absolute;top:4%;left:55%;width:3px;height:3px;border-radius:50%;background:rgba(255,255,220,0.65);"></div>
+  <div style="position:absolute;top:10%;left:75%;width:2px;height:2px;border-radius:50%;background:rgba(255,255,220,0.5);"></div>
+  <div style="position:absolute;top:6%;left:88%;width:3px;height:3px;border-radius:50%;background:rgba(255,255,220,0.6);"></div>
+</div>
+
+<header>
+  <h1>✈️ Your Travel Food Companion</h1>
+  <p>🌍 Explore the world one bite at a time — find the best local food wherever you travel</p>
+</header>
+
+<div class="search-panel">
+  <div class="field">
+    <label>📍 Location</label>
+    <input type="text" id="locationInput" placeholder="e.g. New York, Tokyo, Saigon..." oninput="detectLocationSpecialties(this.value)" />
+  </div>
+  <div class="field">
+    <label>🍜 Food Category</label>
+    <select id="categorySelect" onchange="showFoodInfo(this.value)">
+      <option value="">🌍 All Restaurants</option>
+
+      <optgroup label="🇻🇳 Vietnamese">
+        <option value="vietnamese">All Vietnamese</option>
+        <option value="pho">Phở (Noodle Soup)</option>
+        <option value="banh mi">Bánh Mì (Sandwich)</option>
+        <option value="banh xeo">Bánh Xèo (Sizzling Crepe)</option>
+        <option value="bun bo hue">Bún Bò Huế (Spicy Beef Noodle)</option>
+        <option value="com tam">Cơm Tấm (Broken Rice)</option>
+        <option value="goi cuon">Gỏi Cuốn (Fresh Spring Rolls)</option>
+        <option value="bun cha">Bún Chả (Grilled Pork Noodle)</option>
+      </optgroup>
+
+      <optgroup label="🇯🇵 Japanese">
+        <option value="japanese">All Japanese</option>
+        <option value="sushi">Sushi &amp; Sashimi</option>
+        <option value="ramen">Ramen</option>
+        <option value="udon">Udon</option>
+        <option value="tonkatsu">Tonkatsu</option>
+        <option value="yakitori">Yakitori</option>
+        <option value="tempura">Tempura</option>
+        <option value="izakaya">Izakaya</option>
+      </optgroup>
+
+      <optgroup label="🇰🇷 Korean">
+        <option value="korean">All Korean</option>
+        <option value="korean bbq">Korean BBQ</option>
+        <option value="bibimbap">Bibimbap</option>
+        <option value="tteokbokki">Tteokbokki</option>
+        <option value="korean fried chicken">Korean Fried Chicken</option>
+        <option value="sundubu jjigae">Sundubu Jjigae (Tofu Stew)</option>
+      </optgroup>
+
+      <optgroup label="🇨🇳 Chinese">
+        <option value="chinese">All Chinese</option>
+        <option value="dim sum">Dim Sum</option>
+        <option value="peking duck">Peking Duck</option>
+        <option value="hot pot">Hot Pot</option>
+        <option value="dumplings">Dumplings &amp; Wontons</option>
+        <option value="kung pao">Kung Pao / Szechuan</option>
+        <option value="char siu">Char Siu (BBQ Pork)</option>
+      </optgroup>
+
+      <optgroup label="🇹🇭 Thai">
+        <option value="thai">All Thai</option>
+        <option value="pad thai">Pad Thai</option>
+        <option value="green curry">Green / Red Curry</option>
+        <option value="tom yum">Tom Yum Soup</option>
+        <option value="mango sticky rice">Mango Sticky Rice</option>
+        <option value="som tam">Som Tam (Papaya Salad)</option>
+      </optgroup>
+
+      <optgroup label="🇮🇳 Indian">
+        <option value="indian">All Indian</option>
+        <option value="butter chicken">Butter Chicken</option>
+        <option value="biryani">Biryani</option>
+        <option value="dosa">Dosa</option>
+        <option value="tandoori">Tandoori</option>
+        <option value="chaat">Chaat &amp; Street Food</option>
+      </optgroup>
+
+      <optgroup label="🇮🇹 Italian">
+        <option value="italian">All Italian</option>
+        <option value="pizza">Pizza</option>
+        <option value="pasta">Pasta</option>
+        <option value="risotto">Risotto</option>
+        <option value="gelato">Gelato</option>
+        <option value="osso buco">Osso Buco</option>
+      </optgroup>
+
+      <optgroup label="🇲🇽 Mexican">
+        <option value="mexican">All Mexican</option>
+        <option value="tacos">Tacos</option>
+        <option value="burritos">Burritos</option>
+        <option value="enchiladas">Enchiladas</option>
+        <option value="tamales">Tamales</option>
+        <option value="guacamole">Guacamole &amp; Nachos</option>
+      </optgroup>
+
+      <optgroup label="🇺🇸 American">
+        <option value="american">All American</option>
+        <option value="burger">Burgers</option>
+        <option value="bbq ribs">BBQ &amp; Ribs</option>
+        <option value="fried chicken">Fried Chicken</option>
+        <option value="clam chowder">Clam Chowder</option>
+        <option value="mac and cheese">Mac &amp; Cheese</option>
+      </optgroup>
+
+      <optgroup label="🫒 Mediterranean">
+        <option value="mediterranean">All Mediterranean</option>
+        <option value="shawarma">Shawarma &amp; Kebab</option>
+        <option value="falafel">Falafel</option>
+        <option value="hummus">Hummus &amp; Mezze</option>
+        <option value="greek salad">Greek Salad</option>
+        <option value="moussaka">Moussaka</option>
+      </optgroup>
+
+      <optgroup label="🥗 Other">
+        <option value="seafood">Seafood</option>
+        <option value="vegetarian vegan">Vegetarian / Vegan</option>
+        <option value="cafe brunch">Café &amp; Brunch</option>
+      </optgroup>
+    </select>
+  </div>
+  <div class="field" style="max-width:160px">
+    <label>📏 Radius (km)</label>
+    <select id="radiusSelect">
+      <option value="1000">1 km</option>
+      <option value="2000" selected>2 km</option>
+      <option value="5000">5 km</option>
+      <option value="10000">10 km</option>
+      <option value="20000">20 km</option>
+    </select>
+  </div>
+  <div class="mobile-btn-row">
+    <button class="geo-btn" id="geoBtn" onclick="useMyLocation()">📍 My Location</button>
+    <button class="search-btn" id="searchBtn" onclick="startSearch()">🔍 Find Best Value</button>
+  </div>
+</div>
+
+<!-- Local Specialties Panel -->
+<div id="specialtiesPanel" style="display:none;">
+  <div id="specialtiesInner"></div>
+</div>
+
+<!-- Food Info Panel -->
+<div class="food-info-panel" id="foodInfoPanel">
+  <button class="food-info-close" onclick="closeFoodInfo()">✕</button>
+  <div class="food-info-inner" id="foodInfoInner"></div>
+</div>
+
+<!-- Debug log — auto-hides until first message -->
+<div id="debugLogWrap" style="display:none;position:relative;z-index:2;">
+  <button onclick="document.getElementById('debugLogWrap').style.display='none'; updateTopHeight();"
+    style="position:absolute;top:6px;right:10px;background:none;border:none;color:rgba(255,200,120,0.7);font-size:18px;line-height:1;cursor:pointer;z-index:3;" title="Close console">✕</button>
+  <div id="debugLog" style="background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);padding:10px 36px 10px 16px;max-height:130px;overflow-y:auto;border-bottom:1px solid rgba(255,150,50,0.3);font-family:monospace"></div>
+</div>
+
+<div class="main-layout">
+  <div class="results-panel tab-active" id="resultsPanel">
+    <div class="empty-state" id="emptyState">
+      <div class="icon">🗺️</div>
+      <h3>Ready to find your next meal?</h3>
+      <p>Enter a location and food category above,<br/>then click <strong>Find Best Value</strong> to discover<br/>top-rated affordable restaurants near you.</p>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<!-- Mobile bottom tab bar — only shown on narrow screens via CSS -->
+<div class="mobile-tabs" id="mobileTabs">
+  <button class="tab-btn active" id="tabList" onclick="switchTab('list')">
+    <span class="tab-icon">📋</span>List
+  </button>
+  <button class="tab-btn" id="tabMap" onclick="switchTab('map')">
+    <span class="tab-icon">🗺️</span>Map
+  </button>
+</div>
+
+<script>
+  const API_KEY = 'AIzaSyBtXhKshmgNG-CUU1Nq2fNaO8AAIZODwJE';
+
+  let map, service, geocoder, markers = [], infoWindow;
+  let userLocationMarker = null;
+  let allResults = [];
+  let searchTimeout = null;
+  let currentCountryCode = '';
+  let gpsUserLocation  = null;  // real GPS coords — only set by "My Location" button
+  let searchCenter     = null;  // geocoded centre of the typed city
+  let searchCityLabel  = '';    // e.g. "Da Nang" — shown in distance label
+
+  function dbg(msg, color) { /* debug output disabled */ }
+
+  /* ── Measure top content height so map fills exactly the remaining space ── */
+  function updateTopHeight() {
+    const header = document.querySelector('header');
+    const searchPanel = document.querySelector('.search-panel');
+    const debugLogWrap = document.getElementById('debugLogWrap');
+    let h = 0;
+    if (header) h += header.offsetHeight;
+    if (searchPanel) h += searchPanel.offsetHeight;
+    if (debugLogWrap && debugLogWrap.style.display !== 'none') h += debugLogWrap.offsetHeight;
+    document.documentElement.style.setProperty('--top-height', h + 'px');
+  }
+  window.addEventListener('resize', updateTopHeight);
+  window.addEventListener('load', updateTopHeight);
+
+  /* ── Mobile tab switcher ──────────────────────────────── */
+  function switchTab(tab) {
+    const resultsPanel = document.getElementById('resultsPanel');
+    const mapDiv       = document.getElementById('map');
+    const tabList      = document.getElementById('tabList');
+    const tabMap       = document.getElementById('tabMap');
+
+    if (tab === 'list') {
+      resultsPanel.classList.add('tab-active');
+      mapDiv.classList.remove('tab-active');
+      tabList.classList.add('active');
+      tabMap.classList.remove('active');
+    } else {
+      mapDiv.classList.add('tab-active');
+      resultsPanel.classList.remove('tab-active');
+      tabMap.classList.add('active');
+      tabList.classList.remove('active');
+      // Trigger a resize so the map tiles repaint correctly after being hidden
+      if (typeof google !== 'undefined' && map) {
+        google.maps.event.trigger(map, 'resize');
+      }
+    }
+  }
+
+  function clearSearchTimeout() {
+    if (searchTimeout) { clearTimeout(searchTimeout); searchTimeout = null; }
+  }
+
+  function startSearchTimeout() {
+    clearSearchTimeout();
+    searchTimeout = setTimeout(() => {
+      dbg('⏱️ 12s timeout fired — API never responded', '#ff6b35');
+      setLoading(false);
+      showError('⏱️ Search timed out — the Google Maps API key may be over quota or missing Places API access. <a href="https://console.cloud.google.com" target="_blank" style="color:#f7931e">Get a free key →</a>');
+    }, 12000);
+  }
+
+  const foodInfo = {
+    // ── VIETNAMESE ──
+    pho: {
+      name: 'Phở', flag: '🇻🇳', origin: 'Hanoi, Vietnam · ~1900s',
+      history: 'Phở originated in northern Vietnam in the early 20th century, influenced by French pot-au-feu and Chinese noodle soups. It became a national symbol after spreading south during the Vietnam War.',
+      howToMake: 'Simmer beef bones with charred ginger & onion for 6–12 hours. Season broth with star anise, clove, cinnamon & fish sauce. Serve over rice noodles with thin-sliced beef, topped with herbs, bean sprouts & lime.',
+      ingredients: ['Beef bones', 'Rice noodles', 'Star anise', 'Cinnamon', 'Fish sauce', 'Ginger', 'Onion', 'Thai basil', 'Bean sprouts', 'Lime'],
+      health: { calories: 350, protein: 85, carbs: 50, fat: 20, score: 80, label: 'Very Healthy', color: '#4caf50' },
+      healthNote: 'High protein, rich in collagen from bone broth. Low fat if lean cuts used. Good source of minerals.'
+    },
+    'banh mi': {
+      name: 'Bánh Mì', flag: '🇻🇳', origin: 'Saigon, Vietnam · 1950s',
+      history: 'A product of French colonialism — the baguette was adopted by Vietnamese bakers who hollowed it out and filled it with local ingredients, creating one of the world\'s great fusion sandwiches.',
+      howToMake: 'Split a crispy baguette, spread with pâté and mayo. Layer with pickled daikon & carrot, cucumber, jalapeño, cilantro and choice of filling: char siu pork, grilled chicken, or tofu.',
+      ingredients: ['Baguette', 'Pork pâté', 'Mayo', 'Daikon', 'Carrot', 'Cucumber', 'Jalapeño', 'Cilantro', 'Char siu pork', 'Soy sauce'],
+      health: { calories: 450, protein: 65, carbs: 70, fat: 40, score: 62, label: 'Moderate', color: '#ff9800' },
+      healthNote: 'Good balance of protein & carbs. High sodium from pâté & sauces. Fresh vegetables add nutrients.'
+    },
+    'banh xeo': {
+      name: 'Bánh Xèo', flag: '🇻🇳', origin: 'Central Vietnam · Traditional',
+      history: 'Named for the sizzling sound when batter hits the hot pan ("xèo"), this crispy crepe is a popular street food across Vietnam, with regional variations in size and filling.',
+      howToMake: 'Make batter from rice flour, coconut milk & turmeric. Pour into a hot oiled skillet, add shrimp, pork, bean sprouts & green onion. Fold and serve with lettuce wraps and nuoc cham dipping sauce.',
+      ingredients: ['Rice flour', 'Coconut milk', 'Turmeric', 'Shrimp', 'Pork belly', 'Bean sprouts', 'Green onion', 'Lettuce', 'Fish sauce', 'Lime'],
+      health: { calories: 380, protein: 60, carbs: 55, fat: 45, score: 65, label: 'Moderate', color: '#ff9800' },
+      healthNote: 'Good protein from shrimp & pork. Coconut milk adds saturated fat. Served with fresh herbs for added vitamins.'
+    },
+    'bun bo hue': {
+      name: 'Bún Bò Huế', flag: '🇻🇳', origin: 'Huế, Vietnam · Imperial era',
+      history: 'Originating in the royal city of Huế, this spicy noodle soup was once reserved for the imperial court. It\'s more complex and fiery than phở, with lemongrass and shrimp paste.',
+      howToMake: 'Boil pork & beef bones with lemongrass & shrimp paste. Season with chili oil. Serve over thick round noodles with sliced beef shank, pork, and fresh herbs.',
+      ingredients: ['Pork bones', 'Beef shank', 'Lemongrass', 'Shrimp paste', 'Chili', 'Round noodles', 'Banana blossom', 'Thai basil', 'Bean sprouts'],
+      health: { calories: 420, protein: 80, carbs: 55, fat: 25, score: 72, label: 'Healthy', color: '#8bc34a' },
+      healthNote: 'High protein, rich broth with anti-inflammatory lemongrass. Spice boosts metabolism.'
+    },
+    'com tam': {
+      name: 'Cơm Tấm', flag: '🇻🇳', origin: 'Saigon, Vietnam · Early 20th century',
+      history: 'Cơm Tấm means "broken rice" — originally a cheaper leftover grain eaten by workers in Saigon, it became a beloved staple topped with grilled pork and an egg.',
+      howToMake: 'Marinate pork in lemongrass, fish sauce & sugar. Grill until caramelized. Serve over steamed broken rice with a fried egg, pickled veg, and fish sauce dressing.',
+      ingredients: ['Broken rice', 'Pork chop', 'Fish sauce', 'Lemongrass', 'Sugar', 'Egg', 'Tomato', 'Cucumber', 'Scallion oil'],
+      health: { calories: 520, protein: 70, carbs: 75, fat: 35, score: 60, label: 'Moderate', color: '#ff9800' },
+      healthNote: 'Energy-dense meal. Good protein from pork. High carb — great for active days.'
+    },
+    'goi cuon': {
+      name: 'Gỏi Cuốn', flag: '🇻🇳', origin: 'Southern Vietnam',
+      history: 'Fresh spring rolls are a southern Vietnamese specialty, distinct from fried rolls. They showcase the Vietnamese philosophy of fresh, light eating with raw herbs and rice paper.',
+      howToMake: 'Soak rice paper briefly. Layer shrimp, rice vermicelli, lettuce, mint, and cilantro. Roll tightly. Serve with hoisin-peanut dipping sauce.',
+      ingredients: ['Rice paper', 'Shrimp', 'Rice vermicelli', 'Lettuce', 'Mint', 'Cilantro', 'Cucumber', 'Hoisin sauce', 'Peanuts'],
+      health: { calories: 180, protein: 55, carbs: 65, fat: 15, score: 92, label: 'Excellent', color: '#2e7d32' },
+      healthNote: 'One of the healthiest Vietnamese dishes. Low calorie, high protein, packed with fresh herbs and vitamins.'
+    },
+    'bun cha': {
+      name: 'Bún Chả', flag: '🇻🇳', origin: 'Hanoi, Vietnam',
+      history: 'A Hanoi classic made famous globally when Anthony Bourdain and President Obama shared a bowl. Grilled pork is served in a sweet-savory broth alongside vermicelli and herbs.',
+      howToMake: 'Marinate ground pork patties and belly slices in fish sauce, sugar & shallots. Grill over charcoal. Serve in diluted fish sauce broth with noodles and a fresh herb plate.',
+      ingredients: ['Ground pork', 'Pork belly', 'Fish sauce', 'Sugar', 'Shallots', 'Rice vermicelli', 'Lettuce', 'Perilla', 'Mint', 'Papaya'],
+      health: { calories: 400, protein: 75, carbs: 50, fat: 30, score: 70, label: 'Healthy', color: '#8bc34a' },
+      healthNote: 'Grilling reduces fat. High protein. Light broth rather than heavy sauce keeps calories moderate.'
+    },
+    vietnamese: {
+      name: 'Vietnamese Cuisine', flag: '🇻🇳', origin: 'Vietnam · 4,000+ years',
+      history: 'Vietnamese cuisine is shaped by millennia of history, Chinese influence in the north, French colonialism, and indigenous traditions. It is celebrated for its balance of flavours — sweet, sour, salty, spicy — and use of fresh herbs.',
+      howToMake: 'Core techniques include braising, grilling, steaming, and fresh assembly. Fish sauce (nước mắm) is the backbone seasoning. Dishes are built around rice, noodles, and fresh herbs.',
+      ingredients: ['Fish sauce', 'Rice', 'Lemongrass', 'Fresh herbs', 'Chili', 'Lime', 'Bean sprouts', 'Pork', 'Shrimp', 'Rice noodles'],
+      health: { calories: 300, protein: 65, carbs: 60, fat: 20, score: 85, label: 'Very Healthy', color: '#4caf50' },
+      healthNote: 'Consistently ranked among the world\'s healthiest cuisines. Low fat, high in fresh vegetables and herbs, light cooking methods.'
+    },
+    // ── JAPANESE ──
+    sushi: {
+      name: 'Sushi & Sashimi', flag: '🇯🇵', origin: 'Japan · 8th century AD',
+      history: 'Originally a preservation method — fish was fermented with rice. By the Edo period it evolved into fresh nigiri sold at Tokyo street stalls. Today it\'s a global fine-dining staple.',
+      howToMake: 'Season cooked short-grain rice with rice vinegar, sugar & salt. Form into oval shapes. Top with fresh raw fish (tuna, salmon, yellowtail). For rolls, wrap rice and fillings in nori seaweed.',
+      ingredients: ['Sushi rice', 'Rice vinegar', 'Raw fish', 'Nori', 'Wasabi', 'Soy sauce', 'Pickled ginger', 'Sesame seeds', 'Cucumber', 'Avocado'],
+      health: { calories: 300, protein: 70, carbs: 50, fat: 20, score: 85, label: 'Very Healthy', color: '#4caf50' },
+      healthNote: 'Excellent omega-3 fatty acids from fish. Low calorie. High in protein and iodine. Wasabi has antimicrobial properties.'
+    },
+    ramen: {
+      name: 'Ramen', flag: '🇯🇵', origin: 'Japan · Early 20th century',
+      history: 'Introduced by Chinese immigrants, ramen became a Japanese obsession. After WWII rationing, it became a cheap comfort food. Today regional styles (Sapporo, Hakata, Tokyo) are celebrated worldwide.',
+      howToMake: 'Simmer tare (seasoning base: soy, miso, or salt) with rich pork/chicken broth (tonkotsu or shoyu). Cook fresh noodles. Top with chashu pork, soft-boiled egg, nori, bamboo shoots & corn.',
+      ingredients: ['Wheat noodles', 'Pork/chicken broth', 'Soy sauce or miso', 'Chashu pork', 'Soft egg', 'Nori', 'Bamboo shoots', 'Corn', 'Sesame oil', 'Green onion'],
+      health: { calories: 550, protein: 70, carbs: 65, fat: 40, score: 55, label: 'Moderate', color: '#ff9800' },
+      healthNote: 'High sodium is the main concern. Good protein. Broth contains collagen. Choose shoyu/shio over tonkotsu for lower fat.'
+    },
+    ramen: { name: 'Ramen', flag: '🇯🇵', origin: 'Japan · Early 20th century', history: 'Introduced by Chinese immigrants, ramen became a Japanese obsession. After WWII rationing it became cheap comfort food. Regional styles — Sapporo miso, Hakata tonkotsu, Tokyo shoyu — are celebrated worldwide.', howToMake: 'Simmer tare (soy, miso or salt) with rich pork/chicken bone broth. Cook fresh wheat noodles separately. Top with chashu pork, soft-boiled egg, nori, bamboo shoots, corn & sesame oil.', ingredients: ['Wheat noodles','Pork bones','Miso/Soy','Chashu pork','Soft egg','Nori','Bamboo shoots','Corn','Sesame oil','Green onion'], health: { calories: 550, protein: 70, carbs: 65, fat: 40, score: 55, label: 'Moderate', color: '#ff9800' }, healthNote: 'High sodium. Good protein & collagen from broth. Choose shio or shoyu over tonkotsu for lower fat.' },
+    japanese: { name: 'Japanese Cuisine', flag: '🇯🇵', origin: 'Japan · Ancient', history: 'Japanese cuisine (washoku) was shaped by Buddhism, Shintoism, and geography. It emphasizes seasonality, umami, and presentation. UNESCO listed it as Intangible Cultural Heritage in 2013.', howToMake: 'Core techniques: steaming, grilling (yakimono), simmering (nimono), and raw preparation. Dashi (kombu & bonito broth) is the foundation of most dishes. Balance of five tastes is essential.', ingredients: ['Dashi','Soy sauce','Mirin','Sake','Rice','Miso','Seaweed','Tofu','Fish','Sesame'], health: { calories: 400, protein: 65, carbs: 55, fat: 25, score: 82, label: 'Very Healthy', color: '#4caf50' }, healthNote: 'Japan has one of the world\'s longest life expectancies, partly attributed to its diet — low in saturated fat, high in fish and vegetables.' },
+    // ── KOREAN ──
+    'korean bbq': { name: 'Korean BBQ', flag: '🇰🇷', origin: 'Korea · Goguryeo period', history: 'Roasting meat over fire dates back to the Goguryeo kingdom (37 BC). Modern KBBQ with tabletop grills became popular after the Korean War, evolving into a shared social dining experience.', howToMake: 'Marinate beef (bulgogi), pork belly or short ribs in soy, sesame oil, garlic, ginger & pear. Grill at the table. Wrap in lettuce with garlic, gochujang & kimchi.', ingredients: ['Beef/Pork','Soy sauce','Sesame oil','Garlic','Ginger','Korean pear','Gochujang','Lettuce','Kimchi','Rice'], health: { calories: 600, protein: 80, carbs: 25, fat: 50, score: 58, label: 'Moderate', color: '#ff9800' }, healthNote: 'High protein. Pork belly is high in fat. Fermented kimchi is excellent for gut health. Keep portions moderate.' },
+    bibimbap: { name: 'Bibimbap', flag: '🇰🇷', origin: 'Korea · Joseon Dynasty', history: 'Bibimbap (mixed rice) has royal origins in the Joseon court. It also served as a ritual dish for ancestral rites. The stone pot version (dolsot) became popular in the 20th century.', howToMake: 'Arrange sautéed vegetables (spinach, carrots, mushrooms, zucchini) and choice of protein over steamed rice in a bowl. Top with a fried or raw egg and gochujang. Mix everything together before eating.', ingredients: ['Steamed rice','Spinach','Carrot','Mushroom','Zucchini','Egg','Gochujang','Sesame oil','Beef/tofu','Seaweed'], health: { calories: 480, protein: 60, carbs: 70, fat: 25, score: 78, label: 'Healthy', color: '#8bc34a' }, healthNote: 'Excellent nutrient variety from multiple vegetables. Good protein. Gochujang adds capsaicin which boosts metabolism.' },
+    korean: { name: 'Korean Cuisine', flag: '🇰🇷', origin: 'Korea · Ancient', history: 'Korean cuisine evolved over 5,000 years, deeply influenced by agricultural practices and fermentation culture. Kimchi, gochujang and doenjang are UNESCO-recognized fermented staples.', howToMake: 'Built on rice, fermented side dishes (banchan) and bold pastes. Key techniques include fermenting, grilling, braising (jjim) and stewing (jjigae). Every meal features multiple small shared plates.', ingredients: ['Gochujang','Doenjang','Kimchi','Sesame','Garlic','Soy sauce','Rice','Tofu','Pork','Seafood'], health: { calories: 400, protein: 60, carbs: 60, fat: 25, score: 75, label: 'Healthy', color: '#8bc34a' }, healthNote: 'Fermented foods (kimchi, doenjang) are rich in probiotics. High garlic intake linked to cardiovascular benefits.' },
+    // ── CHINESE ──
+    'dim sum': { name: 'Dim Sum', flag: '🇨🇳', origin: 'Guangdong, China · Tang Dynasty', history: 'Dim sum originated as small snacks served at teahouses along the Silk Road. The Cantonese yum cha (tea-drinking) tradition of sharing dim sum dates to the Tang Dynasty (618–907 AD).', howToMake: 'Steam har gow (shrimp dumplings) in bamboo baskets. Pan-fry siu mai (pork & prawn). Bake char siu bao (BBQ pork buns). Each item is a small, precise craft requiring skill and practice.', ingredients: ['Shrimp','Pork','Wheat starch','Rice flour','Bamboo shoots','Scallion','Sesame oil','Oyster sauce','Egg','BBQ pork'], health: { calories: 350, protein: 55, carbs: 55, fat: 30, score: 65, label: 'Moderate', color: '#ff9800' }, healthNote: 'Steamed items are healthiest. Fried options (spring rolls, turnip cake) add fat. Great for variety and portion control.' },
+    chinese: { name: 'Chinese Cuisine', flag: '🇨🇳', origin: 'China · 5,000+ years', history: 'One of the world\'s oldest and most diverse culinary traditions, spanning eight major regional schools (Cantonese, Sichuan, Hunan, etc.). Chinese cooking techniques and ingredients have influenced nearly every Asian cuisine.', howToMake: 'Master techniques include stir-frying (wok hei), steaming, braising, roasting and deep-frying. Five flavours — sweet, sour, bitter, salty, umami — must be balanced. Soy sauce, ginger, garlic and sesame are cornerstones.', ingredients: ['Soy sauce','Ginger','Garlic','Sesame oil','Rice','Noodles','Tofu','Pork','Oyster sauce','Five-spice'], health: { calories: 450, protein: 60, carbs: 65, fat: 30, score: 65, label: 'Moderate', color: '#ff9800' }, healthNote: 'Highly variable by region. Cantonese steamed dishes are very healthy. Szechuan dishes can be high in oil and sodium.' },
+    'hot pot': { name: 'Hot Pot', flag: '🇨🇳', origin: 'Inner Mongolia · ~1,000 years ago', history: 'Hot pot traces to Mongolian horsemen who cooked meat in their helmets over fire. It spread throughout China, with Chongqing\'s spicy mala broth becoming the most famous modern version.', howToMake: 'Prepare a split pot of spicy mala broth and mild broth. Dip thinly sliced meats, seafood, vegetables, tofu and noodles into simmering broth. Serve with sesame, peanut or egg dipping sauces.', ingredients: ['Beef/Lamb slices','Seafood','Tofu','Mushrooms','Vegetables','Glass noodles','Szechuan peppercorn','Chili oil','Sesame paste','Broth'], health: { calories: 500, protein: 70, carbs: 40, fat: 35, score: 68, label: 'Moderate', color: '#ff9800' }, healthNote: 'Highly customizable — choose lean meats and lots of vegetables for a very healthy meal. Avoid dipping sauces heavy in oil.' },
+    // ── THAI ──
+    'pad thai': { name: 'Pad Thai', flag: '🇹🇭', origin: 'Thailand · 1940s', history: 'Pad Thai was promoted by the Thai government in the 1940s as a nationalist dish to reduce rice consumption and unify the country. It became Thailand\'s most exported culinary ambassador.', howToMake: 'Stir-fry soaked rice noodles in a wok with egg, tofu or shrimp, bean sprouts and green onion. Season with tamarind paste, fish sauce, and sugar. Finish with peanuts, lime and chili flakes.', ingredients: ['Rice noodles','Tamarind paste','Fish sauce','Eggs','Shrimp/Tofu','Bean sprouts','Green onion','Peanuts','Lime','Dried shrimp'], health: { calories: 430, protein: 60, carbs: 70, fat: 25, score: 68, label: 'Moderate', color: '#ff9800' }, healthNote: 'Moderate calorie dish. High in carbs from noodles. Tamarind is rich in antioxidants. Choose shrimp over pork for leaner option.' },
+    thai: { name: 'Thai Cuisine', flag: '🇹🇭', origin: 'Thailand · Ancient', history: 'Thai cuisine blends Indian, Chinese and Southeast Asian influences over centuries of trade. Royal Thai cuisine developed elaborate presentation and complex flavour balancing that remains central to the tradition.', howToMake: 'Balance four fundamental flavours: sweet (palm sugar), sour (lime/tamarind), salty (fish sauce) and spicy (chili). Fresh herbs — Thai basil, kaffir lime leaves, galangal — are essential. Curry pastes are made fresh by pounding aromatics.', ingredients: ['Fish sauce','Coconut milk','Lemongrass','Galangal','Kaffir lime','Thai basil','Palm sugar','Shrimp paste','Jasmine rice','Chili'], health: { calories: 380, protein: 55, carbs: 55, fat: 28, score: 72, label: 'Healthy', color: '#8bc34a' }, healthNote: 'Rich in anti-inflammatory herbs (lemongrass, galangal, turmeric). Coconut milk adds saturated fat but also lauric acid.' },
+    // ── INDIAN ──
+    biryani: { name: 'Biryani', flag: '🇮🇳', origin: 'Persia/Mughal India · 16th century', history: 'Biryani arrived with Persian traders and the Mughal Empire. It was perfected in the royal kitchens of Hyderabad and Lucknow, where it became a dish of extraordinary fragrance and layering.', howToMake: 'Marinate meat in yogurt, spices & saffron. Par-cook basmati rice separately. Layer meat and rice in a sealed pot (dum cooking). Steam together until aromatic. Garnish with fried onions and mint.', ingredients: ['Basmati rice','Chicken/Lamb','Yogurt','Saffron','Ghee','Cardamom','Cloves','Cinnamon','Fried onion','Mint'], health: { calories: 550, protein: 65, carbs: 75, fat: 35, score: 60, label: 'Moderate', color: '#ff9800' }, healthNote: 'Energy-dense festive dish. Aromatic spices (cardamom, cinnamon) aid digestion. Use less ghee for a lighter version.' },
+    indian: { name: 'Indian Cuisine', flag: '🇮🇳', origin: 'India · 5,000+ years', history: 'Indian cuisine is one of the world\'s oldest, shaped by the Indus Valley civilization, Vedic traditions, Mughal rule, and British colonialism. With 29 states, it encompasses hundreds of distinct regional cuisines.', howToMake: 'Spice mastery is central — whole spices are bloomed in oil (tadka), ground into pastes or used as finishing garam masala. Slow cooking develops deep flavours. Lentils (dal), bread (roti/naan) and rice are staples.', ingredients: ['Turmeric','Cumin','Coriander','Garam masala','Ginger','Garlic','Ghee','Yogurt','Lentils','Basmati rice'], health: { calories: 420, protein: 60, carbs: 65, fat: 28, score: 72, label: 'Healthy', color: '#8bc34a' }, healthNote: 'Rich in anti-inflammatory spices (turmeric, curcumin). Lentils are excellent plant-based protein. Vegetarian tradition makes it very diet-friendly.' },
+    // ── ITALIAN ──
+    pizza: { name: 'Pizza', flag: '🇮🇹', origin: 'Naples, Italy · 1800s', history: 'Neapolitan flatbreads with toppings existed for centuries, but modern pizza with tomato sauce was born in Naples in the 1800s. The Margherita was created in 1889 for Queen Margherita of Savoy.', howToMake: 'Make dough with 00 flour, water, yeast & salt. Cold-ferment 24–72 hours. Stretch by hand, top with San Marzano tomato sauce and fresh mozzarella. Cook in a wood-fired oven at 485°C for 90 seconds.', ingredients: ['00 flour','San Marzano tomatoes','Fresh mozzarella','Yeast','Olive oil','Basil','Salt','Garlic'], health: { calories: 570, protein: 55, carbs: 75, fat: 35, score: 55, label: 'Moderate', color: '#ff9800' }, healthNote: 'Highly variable by toppings. Neapolitan thin-crust with vegetables is much healthier than deep-dish loaded versions. Lycopene in tomatoes is antioxidant-rich.' },
+    italian: { name: 'Italian Cuisine', flag: '🇮🇹', origin: 'Italy · Ancient Rome', history: 'Italian cuisine traces to ancient Rome and Greek colonists. Modern Italian food crystallized in the 19th century with regional identities. It is the most widely replicated cuisine in the world.', howToMake: 'Quality ingredients are paramount — few ingredients, perfectly executed. Pasta is made fresh with 00 flour and eggs. Soffritto (onion, carrot, celery sautéed in olive oil) starts most sauces. Simplicity is the rule.', ingredients: ['Pasta','Olive oil','Tomatoes','Garlic','Parmesan','Basil','Mozzarella','Prosciutto','Risotto rice','Wine'], health: { calories: 450, protein: 55, carbs: 65, fat: 28, score: 70, label: 'Healthy', color: '#8bc34a' }, healthNote: 'Mediterranean diet (high olive oil, vegetables, fish) is scientifically linked to longevity and reduced heart disease.' },
+    // ── MEXICAN ──
+    tacos: { name: 'Tacos', flag: '🇲🇽', origin: 'Mexico · Pre-Columbian', history: 'Tacos predate European contact — indigenous Mexicans wrapped food in corn tortillas. The word "taco" may reference silver mining (miners used gunpowder wrapped in paper). Modern street tacos are central to Mexican food culture.', howToMake: 'Warm small corn tortillas on a comal. Top with choice of protein: al pastor (marinated pork from a spit), carnitas (slow-braised pork), or carne asada (grilled beef). Finish with onion, cilantro, lime and salsa.', ingredients: ['Corn tortillas','Pork/Beef','Onion','Cilantro','Lime','Chili peppers','Guajillo chili','Annatto','Tomatillo salsa','Avocado'], health: { calories: 380, protein: 65, carbs: 50, fat: 25, score: 70, label: 'Healthy', color: '#8bc34a' }, healthNote: 'Corn tortillas are gluten-free and lower calorie than flour. High protein from meat. Fresh toppings add vitamins. Minimal added fat in street-style.' },
+    mexican: { name: 'Mexican Cuisine', flag: '🇲🇽', origin: 'Mexico · 3,500+ years', history: 'Recognized by UNESCO as Intangible Cultural Heritage. Mexican cuisine blends ancient Aztec and Maya traditions with Spanish colonialism. Corn, beans and chili are the "Holy Trinity" used for millennia.', howToMake: 'Corn is nixtamalized (soaked in lime water) to make masa for tortillas and tamales. Dried chilis are toasted and rehydrated for complex sauces (mole has up to 30 ingredients). Fresh salsas brighten every dish.', ingredients: ['Corn','Beans','Chili peppers','Avocado','Tomato','Lime','Cilantro','Cacao','Vanilla','Epazote'], health: { calories: 420, protein: 60, carbs: 65, fat: 25, score: 72, label: 'Healthy', color: '#8bc34a' }, healthNote: 'Corn and beans together form a complete protein. Avocado provides healthy monounsaturated fats. Chili peppers boost metabolism.' },
+    // ── AMERICAN ──
+    burger: { name: 'Burgers', flag: '🇺🇸', origin: 'USA · Late 1800s', history: 'Hamburgers trace to Hamburg, Germany (Hamburg steak) brought by German immigrants. The first burger served in a bun appeared at an 1885 county fair. McDonald\'s globalized it into the world\'s most recognized meal.', howToMake: 'Form 80/20 ground beef into patties. Season with salt and pepper only. Cook on a screaming-hot griddle for a crispy smash crust. Toast brioche bun. Layer: sauce, lettuce, tomato, onion, pickles, cheese.', ingredients: ['Ground beef (80/20)','Brioche bun','Cheddar cheese','Lettuce','Tomato','Onion','Pickles','Special sauce','Salt','Pepper'], health: { calories: 650, protein: 70, carbs: 50, fat: 50, score: 45, label: 'Indulgent', color: '#f44336' }, healthNote: 'High in saturated fat and calories. Good protein. Choose leaner blends, whole-grain buns and load up on vegetables to improve nutrition.' },
+    american: { name: 'American Cuisine', flag: '🇺🇸', origin: 'USA · Colonial era', history: 'American cuisine is a mosaic of immigrant food cultures — Native American, European, African, Asian — shaped by geography and industrialization. BBQ, burgers, and apple pie are cultural icons.', howToMake: 'American cooking favors bold flavors, generous portions and comfort. BBQ low-and-slow smoking, deep-frying (Southern tradition) and grilling are signature techniques. Farm-to-table and craft food movements are reshaping modern American cuisine.', ingredients: ['Beef','Corn','Potatoes','Wheat','Maple syrup','Cheddar','Bacon','Buttermilk','Bourbon','Tobacco-smoked spices'], health: { calories: 600, protein: 60, carbs: 60, fat: 45, score: 45, label: 'Indulgent', color: '#f44336' }, healthNote: 'Traditional American diet is high in saturated fat and sodium. Modern farm-to-table and plant-based movements are dramatically improving the landscape.' },
+    // ── MEDITERRANEAN ──
+    falafel: { name: 'Falafel', flag: '🇱🇧', origin: 'Middle East · Ancient', history: 'Falafel\'s origins are disputed — Egypt, Palestine, and Lebanon all claim it. Coptic Christians may have eaten it during Lent as a meat substitute. Today it\'s a beloved street food across the Middle East and globally.', howToMake: 'Soak dried chickpeas (not canned) overnight. Blend with onion, garlic, parsley, coriander, cumin & baking soda. Form into balls. Deep-fry until crispy. Serve in pita with tahini, tomato and pickles.', ingredients: ['Dried chickpeas','Onion','Garlic','Parsley','Coriander','Cumin','Baking soda','Tahini','Pita','Pickled turnip'], health: { calories: 330, protein: 60, carbs: 55, fat: 25, score: 72, label: 'Healthy', color: '#8bc34a' }, healthNote: 'High plant protein and fiber from chickpeas. Deep frying adds fat — baked falafel is significantly healthier. Excellent for vegetarians.' },
+    mediterranean: { name: 'Mediterranean Cuisine', flag: '🫒', origin: 'Mediterranean Basin · Ancient', history: 'The Mediterranean diet spans Greek, Italian, Lebanese, Turkish, Israeli and North African traditions, unified by olive oil, legumes, fresh vegetables and seafood. It is consistently ranked the world\'s healthiest diet by nutritionists.', howToMake: 'Build on olive oil, legumes, grains, vegetables and seafood. Mezze (small shared plates) is a social institution. Herbs (oregano, thyme, za\'atar) replace heavy sauces. Lemon brightens every dish.', ingredients: ['Olive oil','Chickpeas','Eggplant','Lamb','Tomatoes','Feta','Za\'atar','Lemon','Tahini','Yogurt'], health: { calories: 380, protein: 55, carbs: 55, fat: 28, score: 88, label: 'Excellent', color: '#2e7d32' }, healthNote: 'Scientifically proven to reduce heart disease, diabetes and cognitive decline. Olive oil, legumes and fish are key health drivers.' },
+    // ── OTHER ──
+    seafood: { name: 'Seafood', flag: '🌊', origin: 'Global · Ancient', history: 'Humans have eaten seafood since prehistoric times. Coastal civilizations were built around fishing. Today global seafood traditions range from Japanese sashimi to New England chowder to West African grilled fish.', howToMake: 'Fresh is everything. Techniques: steaming (preserves delicate flavour), grilling (adds char), en papillote (steaming in parchment), ceviche (citrus-cured raw fish). Season with lemon, herbs and minimal fat.', ingredients: ['Fresh fish','Shrimp','Lobster','Clams','Garlic','Lemon','Butter','Herbs','White wine','Olive oil'], health: { calories: 300, protein: 85, carbs: 10, fat: 15, score: 88, label: 'Excellent', color: '#2e7d32' }, healthNote: 'Highest quality protein available. Rich in omega-3 fatty acids, vitamin D, and iodine. Low in saturated fat. Strongly linked to heart and brain health.' },
+    'vegetarian vegan': { name: 'Vegetarian / Vegan', flag: '🥗', origin: 'Global · Ancient', history: 'Vegetarianism dates to ancient India and Greece. Modern veganism was codified by Donald Watson in 1944 in England. Plant-based eating is now the fastest-growing food movement globally due to health and environmental awareness.', howToMake: 'Build meals around complete proteins: combine legumes + grains (rice & beans, hummus & pita). Use nutritional yeast for umami. Roast vegetables to concentrate flavour. Fermentation adds depth and probiotics.', ingredients: ['Legumes','Tofu','Tempeh','Quinoa','Leafy greens','Nuts','Seeds','Nutritional yeast','Vegetables','Whole grains'], health: { calories: 320, protein: 50, carbs: 65, fat: 18, score: 90, label: 'Excellent', color: '#2e7d32' }, healthNote: 'Linked to lower rates of heart disease, diabetes and certain cancers. Ensure adequate B12, iron and omega-3 from fortified foods or supplements.' },
+    'cafe brunch': { name: 'Café & Brunch', flag: '☕', origin: 'Europe & USA · 19th century', history: 'Brunch was invented in England in the 1890s as a late-morning meal for Sunday hunt parties. Café culture grew from Viennese coffeehouses in the 17th century, spreading across Europe and then globally.', howToMake: 'Eggs Benedict: poach eggs, make hollandaise from egg yolks and butter, serve on toasted English muffin with Canadian bacon. Avocado toast: smash ripe avocado on sourdough, season with lemon, chili flakes and everything bagel seasoning.', ingredients: ['Eggs','Avocado','Sourdough','Espresso','Milk','Salmon','Cream cheese','Berries','Maple syrup','Bacon'], health: { calories: 450, protein: 50, carbs: 60, fat: 30, score: 62, label: 'Moderate', color: '#ff9800' }, healthNote: 'Highly variable. Avocado-based options are rich in healthy fats. Watch sugar in sweet brunch dishes. Eggs are nutrient-dense.' },
+  };
+
+  function showFoodInfo(value) {
+    const panel = document.getElementById('foodInfoPanel');
+    const inner = document.getElementById('foodInfoInner');
+    if (!value || !foodInfo[value]) {
+      panel.classList.remove('open');
+      return;
+    }
+    const f = foodInfo[value];
+    const healthColor = f.health.color;
+
+    const scoreLabel = f.health.score >= 85 ? '🌟 ' + f.health.label
+      : f.health.score >= 70 ? '✅ ' + f.health.label
+      : f.health.score >= 55 ? '⚠️ ' + f.health.label
+      : '🍟 ' + f.health.label;
+
+    const scoreText = f.health.score >= 85 ? '#2e7d32'
+      : f.health.score >= 70 ? '#558b2f'
+      : f.health.score >= 55 ? '#e65100' : '#c62828';
+
+    inner.innerHTML = `
+      <div class="food-info-section">
+        <div class="food-info-name">${f.flag} ${f.name}</div>
+        <div class="food-info-origin">📍 ${f.origin}</div>
+        <div class="food-info-title" style="margin-top:10px">📜 History</div>
+        <div class="food-info-text">${f.history}</div>
+      </div>
+      <div class="food-info-section">
+        <div class="food-info-title">👨‍🍳 How It's Made</div>
+        <div class="food-info-text">${f.howToMake}</div>
+      </div>
+      <div class="food-info-section">
+        <div class="food-info-title">🧂 Key Ingredients</div>
+        <div class="ingredient-tags">${f.ingredients.map(i => `<span class="ingredient-tag">${i}</span>`).join('')}</div>
+      </div>
+      <div class="food-info-section">
+        <div class="food-info-title">💚 Health Profile</div>
+        <div class="health-score-badge" style="background:${healthColor}20; color:${scoreText}; border:1px solid ${healthColor}50">${scoreLabel} · ${f.health.score}/100</div>
+        <div class="health-bar-wrap">
+          <div class="health-row"><span>Protein</span><div class="health-bar"><div class="health-bar-fill" style="width:${f.health.protein}%;background:#4caf50"></div></div></div>
+          <div class="health-row"><span>Carbs</span><div class="health-bar"><div class="health-bar-fill" style="width:${f.health.carbs}%;background:#ff9800"></div></div></div>
+          <div class="health-row"><span>Fat</span><div class="health-bar"><div class="health-bar-fill" style="width:${Math.min(f.health.fat,100)}%;background:#f44336"></div></div></div>
+        </div>
+        <div class="food-info-text" style="margin-top:6px;font-size:12px;color:#777">~${f.health.calories} kcal · ${f.healthNote}</div>
+      </div>`;
+
+    panel.classList.add('open');
+  }
+
+  function closeFoodInfo() {
+    document.getElementById('foodInfoPanel').classList.remove('open');
+    document.getElementById('categorySelect').value = '';
+  }
+
+  function initMap() {
+    map = new google.maps.Map(document.getElementById('map'), {
+      center: { lat: 40.7128, lng: -74.0060 },
+      zoom: 13,
+      styles: [
+        { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] }
+      ]
+    });
+    geocoder = new google.maps.Geocoder();
+    service = new google.maps.places.PlacesService(map);
+    infoWindow = new google.maps.InfoWindow();
+    dbg('✅ Google Maps loaded — geocoder & Places service ready');
+
+    // Allow pressing Enter to search
+    document.getElementById('locationInput').addEventListener('keypress', e => {
+      if (e.key === 'Enter') startSearch();
+    });
+
+    if (API_KEY === 'YOUR_API_KEY') {
+      showApiKeyNotice();
+    }
+
+    // Set accurate top-height for the mobile full-screen layout
+    updateTopHeight();
+  }
+
+  function showApiKeyNotice() {
+    const panel = document.getElementById('resultsPanel');
+    const notice = document.createElement('div');
+    notice.className = 'api-key-notice';
+    notice.innerHTML = `<strong>⚠️ API Key Required</strong>Open this HTML file in a text editor and replace <code>YOUR_API_KEY</code> with your Google Places API key to enable live restaurant data.`;
+    panel.insertBefore(notice, panel.firstChild);
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    const geoBtn = document.getElementById('geoBtn');
+    geoBtn.disabled = true;
+    geoBtn.textContent = '⏳ Locating...';
+    dbg('📍 Getting device location...');
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        geoBtn.disabled = false;
+        geoBtn.textContent = '📍 My Location';
+        dbg(`✅ Got location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+
+        if (!geocoder || !service) {
+          alert('Map is still loading. Please try again in a moment.');
+          return;
+        }
+
+        // Store real GPS fix — used for accurate distance calculations
+        const latLng = new google.maps.LatLng(latitude, longitude);
+        gpsUserLocation = latLng;
+        searchCenter    = latLng;
+        searchCityLabel = '';
+
+        const coordStr = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        document.getElementById('locationInput').value = coordStr;
+
+        setLoading(true);
+        clearMarkers();
+        startSearchTimeout();
+        map.setCenter(latLng);
+        map.setZoom(14);
+
+        // Reverse geocode to get country code for delivery app selection
+        geocoder.geocode({ location: latLng }, (geoRes, geoStatus) => {
+          if (geoStatus === 'OK' && geoRes[0]) {
+            const cc = (geoRes[0].address_components || []).find(c => c.types.includes('country'));
+            if (cc) currentCountryCode = cc.short_name.toUpperCase();
+          }
+        });
+
+        // Drop a "You are here" pin at the user's exact location
+        if (userLocationMarker) userLocationMarker.setMap(null);
+        userLocationMarker = new google.maps.Marker({
+          position: latLng,
+          map: map,
+          title: '📍 You are here',
+          zIndex: 999,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: '#1a73e8',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 3
+          }
+        });
+        const youLabel = new google.maps.InfoWindow({
+          content: '<div style="font-weight:700;color:#1a73e8;font-size:13px;">📍 You are here</div>'
+        });
+        youLabel.open(map, userLocationMarker);
+        userLocationMarker.addListener('click', () => youLabel.open(map, userLocationMarker));
+
+        searchNearby(latLng);
+      },
+      (err) => {
+        geoBtn.disabled = false;
+        geoBtn.textContent = '📍 My Location';
+        const msgs = {
+          1: 'Location access denied. Please allow location permission in your browser.',
+          2: 'Location unavailable. Try again or enter your city manually.',
+          3: 'Location request timed out. Please try again.'
+        };
+        dbg('❌ Geolocation error: ' + (msgs[err.code] || err.message), '#ff6b35');
+        alert(msgs[err.code] || 'Could not get your location.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  function startSearch() {
+    const location = document.getElementById('locationInput').value.trim();
+    if (!location) {
+      alert('Please enter a location to search.');
+      return;
+    }
+    if (!geocoder || !service) {
+      alert('Map is still loading. Please wait a moment and try again.');
+      return;
+    }
+
+    // Typed search — clear any previous GPS fix so distance is from city centre
+    gpsUserLocation = null;
+
+    detectLocationSpecialties(location);
+    setLoading(true);
+    clearMarkers();
+    startSearchTimeout();
+
+    geocoder.geocode({ address: location }, (results, status) => {
+      if (status !== 'OK' || !results.length) {
+        clearSearchTimeout();
+        const apiMsg = status === 'REQUEST_DENIED'
+          ? '🔑 API key rejected by Google. <a href="https://console.cloud.google.com" target="_blank" style="color:#f7931e">Check your key →</a>'
+          : `Location not found (status: ${status}). Please try a different city.`;
+        showError(apiMsg);
+        setLoading(false);
+        return;
+      }
+      const latLng = results[0].geometry.location;
+
+      // Extract country code and a human-readable city label
+      const comps = results[0].address_components || [];
+      const countryComp = comps.find(c => c.types.includes('country'));
+      const cityComp    = comps.find(c => c.types.includes('locality') || c.types.includes('administrative_area_level_1'));
+      currentCountryCode = countryComp ? countryComp.short_name.toUpperCase() : '';
+      searchCenter       = latLng;
+      searchCityLabel    = cityComp ? cityComp.long_name : location;
+
+      map.setCenter(latLng);
+      map.setZoom(14);
+      searchNearby(latLng);
+    });
+  }
+
+  // Maps raw category values → precise search queries for textSearch
+  const QUERY_MAP = {
+    // Vietnamese
+    'vietnamese'  : 'Vietnamese restaurant',
+    'pho'         : 'Phở noodle soup restaurant',
+    'banh mi'     : 'Bánh mì sandwich shop',
+    'banh xeo'    : 'Bánh xèo sizzling crepe restaurant',
+    'bun bo hue'  : 'Bún bò Huế spicy beef noodle',
+    'com tam'     : 'Cơm tấm broken rice restaurant',
+    'goi cuon'    : 'Gỏi cuốn fresh spring rolls Vietnamese',
+    'bun cha'     : 'Bún chả grilled pork noodle Hanoi',
+    'hu tieu'     : 'Hủ tiếu noodle soup',
+    // Japanese
+    'japanese'    : 'Japanese restaurant',
+    'sushi'       : 'sushi sashimi restaurant',
+    'ramen'       : 'ramen noodle restaurant',
+    'udon'        : 'udon soba noodle restaurant',
+    'tonkatsu'    : 'tonkatsu Japanese pork cutlet',
+    'yakitori'    : 'yakitori grilled chicken Japanese',
+    'tempura'     : 'tempura Japanese restaurant',
+    'izakaya'     : 'izakaya Japanese bar restaurant',
+    // Korean
+    'korean'      : 'Korean restaurant',
+    'korean bbq'  : 'Korean BBQ grill restaurant',
+    'bibimbap'    : 'bibimbap Korean rice bowl',
+    'tteokbokki'  : 'tteokbokki spicy rice cake Korean',
+    'korean fried chicken': 'Korean fried chicken restaurant',
+    'sundubu jjigae': 'sundubu jjigae Korean tofu stew',
+    // Chinese
+    'chinese'     : 'Chinese restaurant',
+    'dim sum'     : 'dim sum yum cha restaurant',
+    'peking duck' : 'Peking duck Chinese restaurant',
+    'hot pot'     : 'hot pot lẩu restaurant',
+    'dumplings'   : 'dumpling wonton Chinese restaurant',
+    'kung pao'    : 'Sichuan Chinese restaurant',
+    'char siu'    : 'char siu BBQ pork Chinese',
+    // Thai
+    'thai'        : 'Thai restaurant',
+    'pad thai'    : 'Pad Thai noodle restaurant',
+    'green curry' : 'Thai green curry restaurant',
+    'tom yum'     : 'Tom Yum soup Thai restaurant',
+    'mango sticky rice': 'mango sticky rice Thai dessert',
+    'som tam'     : 'som tam papaya salad Thai',
+    // Indian
+    'indian'      : 'Indian restaurant',
+    'butter chicken': 'butter chicken Indian restaurant',
+    'biryani'     : 'biryani Indian restaurant',
+    'dosa'        : 'dosa South Indian restaurant',
+    'tandoori'    : 'tandoori Indian restaurant',
+    'chaat'       : 'chaat Indian street food',
+    // Italian
+    'italian'     : 'Italian restaurant',
+    'pizza'       : 'pizza restaurant',
+    'pasta'       : 'pasta Italian restaurant',
+    'risotto'     : 'risotto Italian restaurant',
+    'gelato'      : 'gelato ice cream Italian',
+    'osso buco'   : 'Italian fine dining restaurant',
+    // Mexican
+    'mexican'     : 'Mexican restaurant',
+    'tacos'       : 'taco Mexican restaurant',
+    'burritos'    : 'burrito Mexican restaurant',
+    'enchiladas'  : 'enchilada Mexican restaurant',
+    'tamales'     : 'tamale Mexican restaurant',
+    'guacamole'   : 'guacamole Mexican restaurant',
+    // American
+    'american'    : 'American restaurant',
+    'burger'      : 'burger hamburger restaurant',
+    'bbq ribs'    : 'BBQ ribs smokehouse restaurant',
+    'fried chicken': 'fried chicken restaurant',
+    'clam chowder': 'clam chowder seafood restaurant',
+    'mac and cheese': 'mac and cheese American diner',
+    // Mediterranean
+    'mediterranean': 'Mediterranean restaurant',
+    'shawarma'    : 'shawarma kebab restaurant',
+    'falafel'     : 'falafel Middle Eastern restaurant',
+    'hummus'      : 'hummus mezze restaurant',
+    'greek salad' : 'Greek restaurant',
+    'moussaka'    : 'Greek Mediterranean restaurant',
+    // Other
+    'seafood'     : 'seafood restaurant',
+    'vegetarian vegan': 'vegetarian vegan restaurant',
+    'cafe brunch' : 'café brunch coffee shop',
+  };
+
+  function searchNearby(latLng) {
+    const category = document.getElementById('categorySelect').value;
+    const radius   = parseInt(document.getElementById('radiusSelect').value);
+
+    // Commit final results to the UI
+    const commitResults = (results) => {
+      clearSearchTimeout();
+      allResults = results
+        .filter(p => p.rating)
+        .slice(0, 20)
+        .map(p => ({
+          ...p,
+          formatted_address: p.formatted_address || p.vicinity || '',
+          valueScore: computeValueScore(p.rating, p.price_level)
+        }));
+      setLoading(false);
+      if (!allResults.length) {
+        showError('No rated restaurants found in this area. Try expanding the radius or a different category.');
+        return;
+      }
+      renderResults(latLng);
+      // Background-enrich addresses that only have vicinity
+      const needsAddress = allResults.filter(p => !p.formatted_address || p.formatted_address === p.vicinity);
+      if (needsAddress.length) enrichAddressesSequentially(needsAddress.map(p => p.place_id));
+    };
+
+    // Shared error handler
+    const handleApiError = (status) => {
+      clearSearchTimeout();
+      setLoading(false);
+      if (status === google.maps.places.PlacesServiceStatus.REQUEST_DENIED ||
+          status === google.maps.places.PlacesServiceStatus.INVALID_REQUEST) {
+        showError('🔑 Places API request denied — make sure <strong>Places API</strong> is enabled for your key in <a href="https://console.cloud.google.com" target="_blank" style="color:#f7931e">Google Cloud Console →</a>');
+      } else if (status === google.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT) {
+        showError('⚠️ Query limit reached. Wait a moment and try again.');
+      } else {
+        showError('No restaurants found in this area. Try expanding the radius or a different category.');
+      }
+    };
+
+    // nearbySearch fallback — used when textSearch yields nothing or as primary for "all"
+    const runNearbyFallback = (keyword) => {
+      const req = { location: latLng, radius: radius, type: 'restaurant' };
+      if (keyword) req.keyword = keyword;
+      service.nearbySearch(req, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length) {
+          commitResults(results);
+        } else {
+          handleApiError(status);
+        }
+      });
+    };
+
+    if (category) {
+      // Build a descriptive text query — no type filter so food stalls/cafés aren't excluded
+      const baseQuery = QUERY_MAP[category] || category;
+      const cityHint  = searchCityLabel ? ` in ${searchCityLabel}` : '';
+      const fullQuery = baseQuery + cityHint;
+
+      dbg(`🔍 textSearch: "${fullQuery}" (radius=${radius}m)`);
+      service.textSearch({
+        query    : fullQuery,
+        location : latLng,
+        radius   : radius,
+        // NOTE: no `type` filter — it over-restricts and misses food stalls, cafés, etc.
+      }, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length >= 3) {
+          // Good results — use them
+          commitResults(results);
+        } else if (
+          status === google.maps.places.PlacesServiceStatus.OK ||
+          status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS
+        ) {
+          // Too few or zero — fall back to nearbySearch with the raw category as keyword
+          dbg(`↩️ textSearch got ${results ? results.length : 0} results — retrying with nearbySearch`);
+          runNearbyFallback(category);
+        } else {
+          handleApiError(status);
+        }
+      });
+    } else {
+      // No category selected — use nearbySearch for all nearby restaurants
+      dbg(`🔄 nearbySearch: all restaurants (radius=${radius}m)`);
+      runNearbyFallback(null);
+    }
+  }
+
+  // Fetch full addresses one at a time in the background — no quota hammering
+  function enrichAddressesSequentially(placeIds, index = 0) {
+    if (index >= placeIds.length) return;
+    const placeId = placeIds[index];
+    service.getDetails(
+      { placeId, fields: ['formatted_address', 'international_phone_number', 'website'] },
+      (result, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && result) {
+          // Update in-memory result
+          const r = allResults.find(p => p.place_id === placeId);
+          if (r) {
+            if (result.formatted_address) r.formatted_address = result.formatted_address;
+            if (result.international_phone_number) r.international_phone_number = result.international_phone_number;
+            if (result.website) r.website = result.website;
+          }
+          // Update address shown on the card immediately (no full re-render)
+          const card = document.getElementById(`card-${placeId}`);
+          if (card && result.formatted_address) {
+            const addrEl = card.querySelector('.card-address');
+            if (addrEl) addrEl.textContent = result.formatted_address;
+          }
+          // Show phone & website on card if newly available
+          if (card && (result.international_phone_number || result.website)) {
+            let extra = card.querySelector('.card-extra-details');
+            if (!extra) {
+              extra = document.createElement('div');
+              extra.className = 'card-extra-details';
+              const distEl = card.querySelector('.card-distance');
+              if (distEl) distEl.parentNode.insertBefore(extra, distEl);
+            }
+            const parts = [];
+            if (result.international_phone_number) parts.push(`📞 ${result.international_phone_number}`);
+            if (result.website) parts.push(`<a href="${result.website}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#f7931e">🌐 Website</a>`);
+            extra.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+          }
+        }
+        // Next one after a short gap — stays well within API quota
+        setTimeout(() => enrichAddressesSequentially(placeIds, index + 1), 250);
+      }
+    );
+  }
+
+  function computeValueScore(rating, priceLevel) {
+    // Value = Quality / Cost
+    // Price: 1=cheap, 2=moderate, 3=expensive, 4=very expensive; undefined treated as 2
+    const price = priceLevel || 2;
+    const ratingNorm = (rating / 5) * 100;     // 0–100
+    const pricePenalty = price * 15;             // higher price = penalty
+    return Math.round(ratingNorm - pricePenalty + (5 - price) * 10);
+  }
+
+  function renderResults(userLatLng) {
+    const sortBy = document.getElementById('sortSelect') ?
+      document.getElementById('sortSelect').value : 'value';
+
+    const sorted = [...allResults].sort((a, b) => {
+      if (sortBy === 'rating') return b.rating - a.rating;
+      if (sortBy === 'price') return (a.price_level || 2) - (b.price_level || 2);
+      return b.valueScore - a.valueScore; // default: value
+    });
+
+    // On mobile, auto-switch to List tab when results arrive
+    if (window.innerWidth <= 700) switchTab('list');
+
+    const panel = document.getElementById('resultsPanel');
+    panel.innerHTML = '';
+
+    // Header with sort
+    const header = document.createElement('div');
+    header.className = 'results-header';
+    header.innerHTML = `
+      <h3>${sorted.length} restaurants found</h3>
+      <select class="sort-select" id="sortSelect" onchange="renderResults(currentLatLng)">
+        <option value="value">Best Value</option>
+        <option value="rating">Highest Rated</option>
+        <option value="price">Lowest Price</option>
+      </select>`;
+    panel.appendChild(header);
+
+    if (!sorted.length) {
+      showError('No rated restaurants found. Try a different area or category.');
+      return;
+    }
+
+    window.currentLatLng = userLatLng;
+    clearMarkers();
+
+    sorted.forEach((place, i) => {
+      const card = createCard(place, i + 1, userLatLng);
+      panel.appendChild(card);
+      addMarker(place, i + 1);
+    });
+  }
+
+  // ── Vietnam-only delivery apps ─────────────────────────────────────────
+  const VN_DELIVERY_APPS = [
+    { cls:'grabfood',   logo:'🟩', label:'GrabFood',   url:'https://food.grab.com/vn/vi/',      eta:'20–35' },
+    { cls:'shopeefood', logo:'🛍️', label:'ShopeeFood', url:'https://shopeefood.vn/',            eta:'15–30' },
+    { cls:'baeminvn',   logo:'🐻', label:'Baemin',     url:'https://www.baemin.vn/',            eta:'20–35' },
+    { cls:'foodpanda',  logo:'🐼', label:'Foodpanda',  url:'https://www.foodpanda.vn/',         eta:'25–40' },
+    { cls:'loship',     logo:'🟣', label:'Loship',     url:'https://loship.vn/',                eta:'20–35' },
+  ];
+
+  // Keyed store so we avoid embedding JSON in HTML attributes
+  const _deliveryAppsStore = {};
+
+  function getDeliveryButtons(name) {
+    // Only show delivery for Vietnam
+    if (currentCountryCode !== 'VN') return '';
+
+    const key = 'da_' + name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now();
+    _deliveryAppsStore[key] = VN_DELIVERY_APPS;
+
+    return `<div class="delivery-section">
+      <button class="btn-delivery-single" onclick="openOrderModalByKey(event,'${key}')">
+        🛵 Đặt Giao Hàng &nbsp;·&nbsp; Order Delivery
+      </button>
+    </div>`;
+  }
+
+  function openOrderModalByKey(event, key) {
+    event.stopPropagation();
+    const apps  = _deliveryAppsStore[key];
+    if (!apps) return;
+    // Find restaurant name from the card
+    const card  = event.target.closest('.restaurant-card');
+    const name  = card ? card.querySelector('.card-name').textContent : '';
+    _openOrderModal(name, apps);
+  }
+
+  function _openOrderModal(name, apps) {
+    // Show the restaurant being ordered from
+    document.getElementById('orderRestName').textContent = name;
+    const place = allResults.find(p => p.name === name);
+    const meta  = [];
+    if (place) {
+      meta.push(`⭐ ${place.rating}`);
+      if (place.price_level) meta.push(getPriceLabel(place.price_level));
+      if (place.vicinity)    meta.push(`📍 ${place.vicinity}`);
+    }
+    document.getElementById('orderRestMeta').textContent = meta.join('  ·  ') || '🛵 Delivery available';
+
+    // Build one row per delivery app — open each app's main page directly
+    const grid = document.getElementById('orderAppsGrid');
+    grid.innerHTML = '';
+    apps.forEach(a => {
+      const btn = document.createElement('button');
+      btn.className = `order-app-btn ${a.cls}`;
+      btn.innerHTML = `
+        <span class="app-logo">${a.logo}</span>
+        <span class="app-info">
+          <div class="app-name">${a.label}</div>
+          <div class="app-eta">Est. ${a.eta} min · Tap to order</div>
+        </span>
+        <span class="app-arrow">›</span>`;
+      btn.onclick = () => confirmOrder(a.logo, a.label, a.url, name);
+      grid.appendChild(btn);
+    });
+
+    document.getElementById('orderOverlay').classList.add('open');
+  }
+
+  function createCard(place, rank, userLatLng) {
+    const card = document.createElement('div');
+    card.className = 'restaurant-card';
+    card.id = `card-${place.place_id}`;
+
+    // Use real GPS position for distance if available, otherwise city search centre
+    const distFrom = gpsUserLocation || userLatLng;
+    const dist = getDistance(distFrom, place.geometry.location);
+    const distLabel = gpsUserLocation
+      ? `📍 ${dist} km from you`
+      : `📍 ${dist} km from ${searchCityLabel || 'search location'}`;
+    const priceLabel = getPriceLabel(place.price_level);
+    const priceClass = place.price_level <= 1 ? '' : place.price_level === 2 ? 'medium' : 'high';
+    const starsHtml = getStarsHtml(place.rating);
+    const category = getCategory(place.types);
+
+    let badgeClass = '';
+    if (rank === 1) badgeClass = 'gold';
+    else if (rank === 2) badgeClass = 'silver';
+    else if (rank === 3) badgeClass = 'bronze';
+
+    const searchQuery = encodeURIComponent(place.name + ' ' + (place.vicinity || ''));
+    const websiteBtn = `<a class="btn-menu" href="https://www.google.com/search?q=${searchQuery}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔍 Search Online</a>`;
+
+    const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+    const mapsBtn = `<a class="btn-menu" href="${mapsUrl}" target="_blank" rel="noopener" style="background:#4285f4" onclick="event.stopPropagation()">📍 Google Maps</a>`;
+
+    card.innerHTML = `
+      <div class="rank-badge ${badgeClass}">${rank}</div>
+      <div class="card-info">
+        <div class="card-name">${place.name}</div>
+        <div class="card-category">${category}</div>
+        <div class="card-meta">
+          <div class="stars">${starsHtml} <span class="rating-num">${place.rating}</span> <span class="review-count">(${(place.user_ratings_total || 0).toLocaleString()})</span></div>
+          <span class="price-tag ${priceClass}">${priceLabel}</span>
+          <span class="value-score">⚡ Score ${place.valueScore}</span>
+        </div>
+        <div class="card-address">${place.formatted_address || ''}</div>
+        <div class="card-distance">${distLabel}</div>
+        <div class="card-actions">${websiteBtn}${mapsBtn}</div>
+        ${getDeliveryButtons(place.name)}
+      </div>`;
+
+    card.addEventListener('click', () => focusPlace(place, rank));
+    return card;
+  }
+
+  function focusPlace(place, rank) {
+    document.querySelectorAll('.restaurant-card').forEach(c => c.classList.remove('active'));
+    const card = document.getElementById(`card-${place.place_id}`);
+    if (card) card.classList.add('active');
+
+    // On mobile, tapping a card switches to Map tab so the pin is visible
+    if (window.innerWidth <= 700) switchTab('map');
+
+    map.setCenter(place.geometry.location);
+    map.setZoom(16);
+
+    const priceLabel = getPriceLabel(place.price_level);
+    const hours = place.opening_hours
+      ? (place.opening_hours.open_now ? '🟢 Open now' : '🔴 Closed')
+      : '';
+    const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+    infoWindow.setContent(`
+      <div class="info-window-content">
+        <h4>#${rank} ${place.name}</h4>
+        <p>⭐ ${place.rating} · ${priceLabel}</p>
+        <p>⚡ Value Score: ${place.valueScore}</p>
+        ${hours ? `<p>${hours}</p>` : ''}
+        <p><a href="${mapsUrl}" target="_blank">📍 Open in Google Maps</a></p>
+      </div>`);
+
+    const marker = markers.find(m => m.placeId === place.place_id);
+    if (marker) infoWindow.open(map, marker.marker);
+  }
+
+  function addMarker(place, rank) {
+    const marker = new google.maps.Marker({
+      position: place.geometry.location,
+      map: map,
+      title: place.name,
+      label: {
+        text: String(rank),
+        color: 'white',
+        fontSize: '11px',
+        fontWeight: 'bold'
+      },
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 16,
+        fillColor: rank === 1 ? '#f6c90e' : rank <= 3 ? '#ff6b35' : '#555',
+        fillOpacity: 1,
+        strokeColor: 'white',
+        strokeWeight: 2,
+      }
+    });
+
+    marker.addListener('click', () => {
+      focusPlace(place, rank);
+      const card = document.getElementById(`card-${place.place_id}`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+
+    markers.push({ marker, placeId: place.place_id });
+  }
+
+  function clearMarkers() {
+    markers.forEach(m => m.marker.setMap(null));
+    markers = [];
+    if (infoWindow) infoWindow.close();
+  }
+
+  function setLoading(isLoading) {
+    const btn = document.getElementById('searchBtn');
+    btn.disabled = isLoading;
+    btn.textContent = isLoading ? '⏳ Searching...' : '🔍 Find Best Value';
+
+    if (isLoading) {
+      const panel = document.getElementById('resultsPanel');
+      panel.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Finding best value restaurants...</p></div>`;
+    }
+  }
+
+  function showError(msg) {
+    const panel = document.getElementById('resultsPanel');
+    panel.innerHTML = `<div class="error-banner">❌ ${msg}</div>`;
+  }
+
+  // Haversine distance
+  function getDistance(from, to) {
+    const R = 6371;
+    const dLat = toRad(to.lat() - from.lat());
+    const dLon = toRad(to.lng() - from.lng());
+    const a = Math.sin(dLat/2)**2 +
+      Math.cos(toRad(from.lat())) * Math.cos(toRad(to.lat())) * Math.sin(dLon/2)**2;
+    return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))).toFixed(1);
+  }
+
+  function toRad(deg) { return deg * Math.PI / 180; }
+
+  function getPriceLabel(level) {
+    return ['', '$', '$$', '$$$', '$$$$'][level] || '$$';
+  }
+
+  function getCategory(types) {
+    const map = {
+      japanese_restaurant: 'Japanese', italian_restaurant: 'Italian',
+      mexican_restaurant: 'Mexican', chinese_restaurant: 'Chinese',
+      indian_restaurant: 'Indian', thai_restaurant: 'Thai',
+      american_restaurant: 'American', mediterranean_restaurant: 'Mediterranean',
+      vietnamese_restaurant: 'Vietnamese', korean_restaurant: 'Korean',
+      pizza: 'Pizza', seafood_restaurant: 'Seafood', cafe: 'Café',
+      bakery: 'Bakery', bar: 'Bar & Grill'
+    };
+    for (const t of (types || [])) {
+      if (map[t]) return map[t];
+    }
+    return 'Restaurant';
+  }
+
+  function getStarsHtml(rating) {
+    const full = Math.floor(rating);
+    const half = rating % 1 >= 0.5 ? 1 : 0;
+    let html = '';
+    for (let i = 0; i < full; i++) html += '<span class="star">★</span>';
+    if (half) html += '<span class="star" style="opacity:0.5">★</span>';
+    return html;
+  }
+  // ── Order Modal ────────────────────────────────────────────────────────
+  function closeOrderModal() {
+    document.getElementById('orderOverlay').classList.remove('open');
+  }
+
+  // Called when user picks a delivery app
+  // appLogo/appName = display info; url = delivery site search URL; restName = restaurant
+  function confirmOrder(appLogo, appName, url, restName) {
+    closeOrderModal();
+
+    // Show the launch bridge screen
+    document.getElementById('launchAppLogo').textContent = appLogo;
+    document.getElementById('launchAppName').textContent = appName;
+    document.getElementById('launchRestName').textContent = restName;
+    const copyBtn = document.getElementById('launchCopyBtn');
+    copyBtn.textContent = '📋 Copy name';
+    copyBtn.classList.remove('copied');
+    document.getElementById('launchOverlay').classList.add('open');
+
+    // Open the delivery site immediately
+    window.open(url, '_blank', 'noopener');
+  }
+
+  function copyRestName() {
+    const name = document.getElementById('launchRestName').textContent;
+    navigator.clipboard.writeText(name).catch(() => {});
+    const btn = document.getElementById('launchCopyBtn');
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 Copy name'; btn.classList.remove('copied'); }, 2000);
+  }
+
+  function closeLaunch() {
+    document.getElementById('launchOverlay').classList.remove('open');
+  }
+
+  // ── Local Specialties Data ──
+  const locationSpecialties = [
+    { keywords: ['saigon','ho chi minh','hcmc','hồ chí minh'],
+      city: 'Ho Chi Minh City', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍚', name:'Cơm Tấm', desc:'Broken rice & grilled pork', search:'com tam' },
+        { emoji:'🥖', name:'Bánh Mì', desc:'Crispy fusion sandwich', search:'banh mi' },
+        { emoji:'🍜', name:'Hủ Tiếu', desc:'Clear pork noodle soup', search:'hu tieu' },
+        { emoji:'🌯', name:'Gỏi Cuốn', desc:'Fresh spring rolls', search:'goi cuon' },
+        { emoji:'🍲', name:'Lẩu', desc:'Vietnamese hot pot', search:'hot pot' },
+        { emoji:'🍡', name:'Chả Giò', desc:'Crispy fried spring rolls', search:'vietnamese' },
+      ]},
+    { keywords: ['hanoi','hà nội','ha noi'],
+      city: 'Hanoi', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍜', name:'Phở', desc:'Famous beef noodle soup', search:'pho' },
+        { emoji:'🍖', name:'Bún Chả', desc:'Grilled pork & noodle', search:'bun cha' },
+        { emoji:'🥮', name:'Bánh Cuốn', desc:'Steamed rice rolls', search:'vietnamese' },
+        { emoji:'🐟', name:'Chả Cá', desc:'Turmeric fish with dill', search:'vietnamese' },
+        { emoji:'🫔', name:'Bánh Mì', desc:'Crispy baguette sandwich', search:'banh mi' },
+      ]},
+    { keywords: ['hoi an','hội an'],
+      city: 'Hội An', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍝', name:'Cao Lầu', desc:'Thick noodles, unique to Hội An', search:'vietnamese' },
+        { emoji:'🍜', name:'Mì Quảng', desc:'Turmeric noodle bowl', search:'vietnamese' },
+        { emoji:'🥟', name:'White Rose', desc:'Delicate shrimp dumplings', search:'vietnamese' },
+        { emoji:'🥖', name:'Bánh Mì Phượng', desc:'World-famous bánh mì', search:'banh mi' },
+      ]},
+    { keywords: ['hue','huế'],
+      city: 'Huế', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍲', name:'Bún Bò Huế', desc:'Spicy imperial beef noodle', search:'bun bo hue' },
+        { emoji:'🥘', name:'Cơm Hến', desc:'Baby clam rice', search:'vietnamese' },
+        { emoji:'🫔', name:'Bánh Khoái', desc:'Crispy Hue-style crepe', search:'vietnamese' },
+      ]},
+    { keywords: ['quy nhon','quy nhơn','binh dinh','bình định'],
+      city: 'Quy Nhơn', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍜', name:'Bún Chả Cá', desc:'Fish cake noodle soup', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Xèo Tôm Nhảy', desc:'Sizzling crepe with fresh shrimp', search:'banh xeo' },
+        { emoji:'🍢', name:'Nem Nướng', desc:'Grilled pork skewer rolls', search:'vietnamese' },
+        { emoji:'🥮', name:'Bánh Ít Lá Gai', desc:'Black sticky rice cake', search:'vietnamese' },
+        { emoji:'🍤', name:'Chả Ram Tôm Đất', desc:'Crispy fried river shrimp cake', search:'vietnamese' },
+        { emoji:'🦞', name:'Tôm Hùm Bông', desc:'Grilled spiny lobster, coastal specialty', search:'seafood' },
+      ]},
+    { keywords: ['nha trang','khánh hòa','khanh hoa'],
+      city: 'Nha Trang', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍜', name:'Bún Cá', desc:'Nha Trang fish noodle soup', search:'vietnamese' },
+        { emoji:'🍢', name:'Nem Nướng Ninh Hòa', desc:'Famous Ninh Hòa grilled pork rolls', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Căn', desc:'Mini rice pancakes with quail egg', search:'vietnamese' },
+        { emoji:'🦑', name:'Bún Sứa', desc:'Jellyfish noodle soup', search:'seafood' },
+        { emoji:'🦞', name:'Hải Sản Nướng', desc:'Grilled fresh seafood on the beach', search:'seafood' },
+        { emoji:'🥖', name:'Bánh Mì Nha Trang', desc:'Local style bánh mì', search:'banh mi' },
+      ]},
+    { keywords: ['da nang','đà nẵng','da-nang','danang'],
+      city: 'Đà Nẵng', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍜', name:'Mì Quảng', desc:'Turmeric noodle bowl with herbs', search:'vietnamese' },
+        { emoji:'🍲', name:'Bún Bò Huế', desc:'Spicy lemongrass beef noodle', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Xèo', desc:'Crispy sizzling Vietnamese crepe', search:'banh xeo' },
+        { emoji:'🦞', name:'Hải Sản Tươi', desc:'Fresh grilled seafood by the beach', search:'seafood' },
+        { emoji:'🍡', name:'Bánh Tráng Cuốn Thịt Heo', desc:'Rice paper rolls with pork', search:'vietnamese' },
+        { emoji:'🥖', name:'Bánh Mì', desc:'Crispy baguette sandwich', search:'banh mi' },
+      ]},
+    { keywords: ['thanh hoa','thanh hóa','thanhhoa'],
+      city: 'Thanh Hóa', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🥩', name:'Nem Chua Thanh Hóa', desc:'Fermented sour pork rolls, iconic local snack', search:'vietnamese' },
+        { emoji:'🍚', name:'Cơm Lam', desc:'Sticky rice cooked inside bamboo', search:'vietnamese' },
+        { emoji:'🐟', name:'Cháo Lươn', desc:'Creamy eel congee with lemongrass', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Cuốn Thanh Hóa', desc:'Steamed rice rolls with pork & mushroom', search:'vietnamese' },
+        { emoji:'🍖', name:'Thịt Trâu Gác Bếp', desc:'Smoked buffalo jerky from the highlands', search:'vietnamese' },
+        { emoji:'🍡', name:'Bánh Gai', desc:'Sticky black sesame leaf cake', search:'vietnamese' },
+      ]},
+    { keywords: ['hai phong','hải phòng','haiphong'],
+      city: 'Hải Phòng', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍜', name:'Bánh Đa Cua', desc:'Red crab & thick brown noodle soup', search:'vietnamese' },
+        { emoji:'🦀', name:'Nem Cua Bể', desc:'Crispy sea crab spring rolls', search:'vietnamese' },
+        { emoji:'🥖', name:'Bánh Mì Cay Hải Phòng', desc:'Spicy Hai Phong-style bánh mì', search:'banh mi' },
+        { emoji:'🍲', name:'Bún Cá Hải Phòng', desc:'Local fish noodle soup', search:'vietnamese' },
+        { emoji:'🥘', name:'Cơm Cháy Hải Sản', desc:'Crispy rice with seafood topping', search:'seafood' },
+        { emoji:'🐟', name:'Chả Cá Hải Phòng', desc:'Pan-fried turmeric fish patties', search:'vietnamese' },
+      ]},
+    { keywords: ['cam ranh','cam-ranh','camranh'],
+      city: 'Cam Ranh', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🦞', name:'Tôm Hùm Cam Ranh', desc:'Freshly caught local lobster, grilled or steamed', search:'seafood' },
+        { emoji:'🥞', name:'Bánh Căn', desc:'Mini rice pancakes with quail egg & scallion', search:'vietnamese' },
+        { emoji:'🍜', name:'Bún Cá', desc:'Light fish broth noodle soup', search:'vietnamese' },
+        { emoji:'🦑', name:'Mực Nướng', desc:'Grilled squid by the bay', search:'seafood' },
+        { emoji:'🍢', name:'Nem Nướng', desc:'Charcoal grilled pork rolls', search:'vietnamese' },
+        { emoji:'🦀', name:'Ghẹ Hấp', desc:'Steamed swimming crab with ginger', search:'seafood' },
+      ]},
+    { keywords: ['phan thiet','phan thiết','binh thuan','bình thuận','mui ne','mũi né'],
+      city: 'Phan Thiết', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍜', name:'Bánh Canh Chả Cá', desc:'Thick udon-like noodle with fish cake', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Căn Phan Thiết', desc:'Mini rice cakes with local seafood topping', search:'vietnamese' },
+        { emoji:'🥩', name:'Bò Né', desc:'Sizzling skillet beef & egg, a Phan Thiết original', search:'vietnamese' },
+        { emoji:'🐟', name:'Mực Một Nắng', desc:'Sun-dried half-dried squid, grilled over charcoal', search:'seafood' },
+        { emoji:'🫙', name:'Nước Mắm Phan Thiết', desc:'World-renowned Phan Thiết fish sauce', search:'vietnamese' },
+        { emoji:'🍤', name:'Bánh Tráng Nướng', desc:'Grilled rice paper with toppings — street snack', search:'vietnamese' },
+      ]},
+    { keywords: ['quang tri','quảng trị','quangtri','dong ha','đông hà'],
+      city: 'Quảng Trị', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍜', name:'Bún Hến Quảng Trị', desc:'Baby clam noodle soup, Central Vietnam style', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Ướt Thịt Nướng', desc:'Soft rice sheets with grilled pork skewers', search:'vietnamese' },
+        { emoji:'🍲', name:'Cháo Vạt Giường', desc:'Thick rice porridge with pork offal', search:'vietnamese' },
+        { emoji:'🥖', name:'Bánh Mì Đông Hà', desc:'Local-style bánh mì from the provincial capital', search:'banh mi' },
+        { emoji:'🦐', name:'Tôm Chua', desc:'Fermented sour shrimp paste, eaten with pork & herbs', search:'vietnamese' },
+        { emoji:'🍖', name:'Thịt Nướng Lá Lốt', desc:'Grilled pork wrapped in wild betel leaves', search:'vietnamese' },
+      ]},
+    { keywords: ['long xuyen','long xuyên','an giang','an-giang'],
+      city: 'Long Xuyên', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🐟', name:'Mắm Cá Lóc', desc:'Fermented snakehead fish — Mekong Delta staple', search:'vietnamese' },
+        { emoji:'🍜', name:'Bún Cá Châu Đốc', desc:'Spicy fish noodle soup from nearby Châu Đốc', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Xèo Miền Tây', desc:'Oversized Southern sizzling crepe with shrimp', search:'banh xeo' },
+        { emoji:'🫕', name:'Lẩu Mắm', desc:'Mekong fermented fish hot pot with fresh vegetables', search:'hot pot' },
+        { emoji:'🍚', name:'Cơm Tấm An Giang', desc:'Broken rice plate with grilled pork & egg', search:'vietnamese' },
+        { emoji:'🍮', name:'Chè Thốt Nốt', desc:'Sweet palm sugar coconut dessert', search:'vietnamese' },
+      ]},
+    { keywords: ['rach gia','rạch giá','rachgia','kien giang','kiên giang'],
+      city: 'Rạch Giá', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🦐', name:'Bánh Canh Ghẹ', desc:'Thick noodle soup with fresh swimming crab', search:'vietnamese' },
+        { emoji:'🦀', name:'Ghẹ Rang Muối', desc:'Salt & chili stir-fried swimming crab', search:'seafood' },
+        { emoji:'🐟', name:'Cá Bống Kho Tộ', desc:'Caramelised clay-pot mudfish', search:'vietnamese' },
+        { emoji:'🍜', name:'Bún Mắm', desc:'Fermented fish noodle soup, Southern style', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Tằm Bì', desc:'Thick rice noodles with coconut milk & pork skin', search:'vietnamese' },
+        { emoji:'🦞', name:'Hải Sản Tươi Sống', desc:'Live seafood picked from the Gulf of Thailand', search:'seafood' },
+      ]},
+    { keywords: ['ha tien','hà tiên','hatien','kien giang border','ha tien kampot'],
+      city: 'Hà Tiên', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🐚', name:'Ốc Hương Hà Tiên', desc:'Stir-fried spiced sea snails from the gulf', search:'seafood' },
+        { emoji:'🦐', name:'Tôm Tít Nướng', desc:'Grilled mantis shrimp, a gulf speciality', search:'seafood' },
+        { emoji:'🍜', name:'Bún Mắm Nêm', desc:'Shrimp paste noodle soup, border-town style', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Canh Hà Tiên', desc:'Thick udon noodle in rich seafood broth', search:'vietnamese' },
+        { emoji:'🥗', name:'Gỏi Sứa', desc:'Jellyfish salad with herbs & sesame', search:'vietnamese' },
+        { emoji:'🍹', name:'Nước Thốt Nốt', desc:'Fresh palm sugar juice from Cambodian border palms', search:'vietnamese' },
+      ]},
+    { keywords: ['ca mau','cà mau','camau','mui ca mau','mũi cà mau'],
+      city: 'Cà Mau', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🦀', name:'Cua Cà Mau', desc:'Cà Mau mud crab — the richest & meatiest in Vietnam', search:'seafood' },
+        { emoji:'🦐', name:'Tôm Khô Cà Mau', desc:'Sun-dried shrimp, exported nationwide', search:'seafood' },
+        { emoji:'🐟', name:'Cá Thòi Lòi Nướng', desc:'Grilled mudskipper fish from the mangroves', search:'seafood' },
+        { emoji:'🍜', name:'Bún Cá Cà Mau', desc:'Local fish noodle soup with coconut milk', search:'vietnamese' },
+        { emoji:'🥘', name:'Lẩu Cua Đồng', desc:'Field crab hot pot with banana blossom', search:'hot pot' },
+        { emoji:'🍚', name:'Cơm Gạo Nàng Thơm', desc:'Fragrant "Nàng Thơm" heirloom rice from Chợ Đào', search:'vietnamese' },
+      ]},
+    { keywords: ['mang den','măng đen','kon plong','konplong','kon tum highlands'],
+      city: 'Măng Đen', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🐟', name:'Cá Tầm Nướng', desc:'Grilled sturgeon from cold highland lakes', search:'seafood' },
+        { emoji:'🍖', name:'Heo Rừng Nướng', desc:'Wild boar grilled over wood fire', search:'vietnamese' },
+        { emoji:'🌿', name:'Rau Rừng Xào', desc:'Stir-fried wild jungle greens with garlic', search:'vietnamese' },
+        { emoji:'🍚', name:'Cơm Lam', desc:'Sticky rice cooked in fresh bamboo', search:'vietnamese' },
+        { emoji:'☕', name:'Cà Phê Măng Đen', desc:'Rare single-origin highland Arabica coffee', search:'cafe brunch' },
+        { emoji:'🍵', name:'Chè Dây', desc:'Wild vine herbal tea from the forest', search:'cafe brunch' },
+      ]},
+    { keywords: ['pleiku','gia lai','plei ku','pleiku city'],
+      city: 'Pleiku', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍖', name:'Bò Một Nắng Gia Lai', desc:'Sun-dried beef stir-fried with lemongrass & chili', search:'vietnamese' },
+        { emoji:'🍜', name:'Phở Khô Gia Lai', desc:'Dry pho: noodles & broth served separately', search:'vietnamese' },
+        { emoji:'🥩', name:'Gỏi Lá', desc:'Herb leaf salad platter with 50+ forest greens & grilled pork', search:'vietnamese' },
+        { emoji:'🍚', name:'Cơm Lam Tây Nguyên', desc:'Bamboo sticky rice from the Central Highlands', search:'vietnamese' },
+        { emoji:'🐖', name:'Lợn Cắp Nách Nướng', desc:'Free-range highland pig, grilled whole', search:'vietnamese' },
+        { emoji:'☕', name:'Cà Phê Phố Núi', desc:'Misty mountain coffee culture unique to Pleiku', search:'cafe brunch' },
+      ]},
+    { keywords: ['kon tum','kontum','kon-tum'],
+      city: 'Kon Tum', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🥗', name:'Gỏi Lá Kon Tum', desc:'Wild herb platter with 40+ jungle leaves & grilled meat', search:'vietnamese' },
+        { emoji:'🍜', name:'Phở Khô', desc:'Dry-style pho with thick broth on the side', search:'vietnamese' },
+        { emoji:'🍖', name:'Bò Lá Lốt', desc:'Grilled spiced beef in wild betel leaves', search:'vietnamese' },
+        { emoji:'🍚', name:'Cơm Lam', desc:'Bamboo sticky rice, Central Highlands staple', search:'vietnamese' },
+        { emoji:'🍺', name:'Rượu Ghè', desc:'Jar-fermented communal rice wine', search:'vietnamese' },
+        { emoji:'🐖', name:'Thịt Heo Nướng Than', desc:'Charcoal grilled pork, Bahnar tribal style', search:'vietnamese' },
+      ]},
+    { keywords: ['can tho','cần thơ','mekong delta'],
+      city: 'Cần Thơ', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🫕', name:'Lẩu Mắm', desc:'Mekong fermented fish hot pot', search:'hot pot' },
+        { emoji:'🍜', name:'Hủ Tiếu Nam Vang', desc:'Phnom Penh-style noodle soup', search:'vietnamese' },
+        { emoji:'🥞', name:'Bánh Xèo Miền Tây', desc:'Giant Southern-style sizzling crepe', search:'banh xeo' },
+        { emoji:'🍤', name:'Bánh Cống', desc:'Crispy shrimp & pork fried cake', search:'vietnamese' },
+        { emoji:'🍲', name:'Bún Riêu', desc:'Crab & tomato noodle soup', search:'vietnamese' },
+        { emoji:'🍮', name:'Chè', desc:'Mekong coconut sweet soup desserts', search:'vietnamese' },
+      ]},
+    { keywords: ['da lat','đà lạt','dalat','da-lat','lam dong','lâm đồng'],
+      city: 'Đà Lạt', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🍓', name:'Bánh Tráng Nướng Đà Lạt', desc:'Grilled rice paper street snack loaded with toppings', search:'vietnamese' },
+        { emoji:'🍲', name:'Lẩu Bò Đà Lạt', desc:'Highland beef hot pot with fresh vegetables', search:'hot pot' },
+        { emoji:'🫕', name:'Bánh Mì Xíu Mại', desc:'Bánh mì with pork meatball broth', search:'banh mi' },
+        { emoji:'🌽', name:'Bắp Nướng', desc:'Charcoal-grilled sweet corn with butter & coconut', search:'vietnamese' },
+        { emoji:'🍰', name:'Bánh Crepe Đà Lạt', desc:'French-inspired strawberry crepes', search:'cafe brunch' },
+        { emoji:'☕', name:'Cà Phê Đà Lạt', desc:'Weasel coffee & highland drip coffee culture', search:'cafe brunch' },
+      ]},
+    { keywords: ['vung tau','vũng tàu','vungtau','ba ria','bà rịa'],
+      city: 'Vũng Tàu', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🦐', name:'Bánh Khọt', desc:'Mini coconut-battered prawn pancakes', search:'vietnamese' },
+        { emoji:'🦞', name:'Hải Sản Nướng', desc:'Freshly grilled lobster & crab by the sea', search:'seafood' },
+        { emoji:'🍜', name:'Bún Bò Bắp', desc:'Beef shank noodle soup, local favourite', search:'vietnamese' },
+        { emoji:'🧇', name:'Bánh Canh Vũng Tàu', desc:'Thick udon-like noodle with seafood broth', search:'vietnamese' },
+        { emoji:'🥖', name:'Bánh Mì Vũng Tàu', desc:'Local-style crispy bánh mì with pâté', search:'banh mi' },
+        { emoji:'🍦', name:'Kem Bơ', desc:'Creamy avocado ice cream, a Vũng Tàu speciality', search:'vietnamese' },
+      ]},
+    { keywords: ['sapa','sa pa','lao cai','lào cai','laocai'],
+      city: 'Sapa', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🐖', name:'Thịt Lợn Cắp Nách', desc:'Free-range highland grilled pork', search:'vietnamese' },
+        { emoji:'🌿', name:'Cơm Lam', desc:'Sticky rice cooked in bamboo tubes', search:'vietnamese' },
+        { emoji:'🍖', name:'Thắng Cố', desc:'H\'Mông horse meat stew, a tribal dish', search:'vietnamese' },
+        { emoji:'🌾', name:'Cơm Gạo Đỏ', desc:'Nutty red rice from the terraced fields', search:'vietnamese' },
+        { emoji:'🐟', name:'Cá Hồi Sapa', desc:'Fresh grilled or hot-pot salmon from highland streams', search:'seafood' },
+        { emoji:'🍵', name:'Chè San Tuyết', desc:'Ancient highland Shan Tuyet tea', search:'cafe brunch' },
+      ]},
+    { keywords: ['ha long','hạ long','halong','quang ninh','quảng ninh'],
+      city: 'Hạ Long', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🦪', name:'Hàu Hạ Long', desc:'Grilled oysters in a UNESCO bay setting', search:'seafood' },
+        { emoji:'🦐', name:'Tôm Tích Hạ Long', desc:'Grilled mantis shrimp, fresh off the boat', search:'seafood' },
+        { emoji:'🦑', name:'Mực Hạ Long', desc:'Grilled squid sold dockside', search:'seafood' },
+        { emoji:'🍜', name:'Chả Mực', desc:'Crispy grilled squid cake, Quảng Ninh signature', search:'vietnamese' },
+        { emoji:'🥘', name:'Bún Hải Sản', desc:'Bay seafood noodle soup', search:'vietnamese' },
+        { emoji:'🍺', name:'Hải Sản Nguyên Con', desc:'Whole live seafood — pick from the tank', search:'seafood' },
+      ]},
+    { keywords: ['ninh binh','ninh bình','ninhbinh','tam coc','trang an','tràng an'],
+      city: 'Ninh Bình', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🐐', name:'Thịt Dê Ninh Bình', desc:'Mountain goat — grilled, hot pot or stir-fried', search:'vietnamese' },
+        { emoji:'🍚', name:'Cơm Cháy Ninh Bình', desc:'Crispy burnt rice topped with sautéed meat & veg', search:'vietnamese' },
+        { emoji:'🐟', name:'Cá Rô Đầm Vân Long', desc:'Grilled pond fish from the limestone wetlands', search:'seafood' },
+        { emoji:'🥬', name:'Mít Trộn', desc:'Spicy young jackfruit salad', search:'vietnamese' },
+        { emoji:'🌾', name:'Rượu Kim Sơn', desc:'Famous local rice wine from Kim Sơn district', search:'vietnamese' },
+        { emoji:'🍢', name:'Nem Chua Yên Mạc', desc:'Local fermented sour pork rolls', search:'vietnamese' },
+      ]},
+    { keywords: ['phu quoc','phú quốc','phuquoc','kiên giang'],
+      city: 'Phú Quốc', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'🦞', name:'Tôm Hùm Phú Quốc', desc:'Live lobster grilled fresh at beachside shacks', search:'seafood' },
+        { emoji:'🫙', name:'Nước Mắm Phú Quốc', desc:'World-famous Phú Quốc fish sauce', search:'vietnamese' },
+        { emoji:'🦀', name:'Ghẹ Hấp Sả', desc:'Steamed swimming crab with lemongrass', search:'seafood' },
+        { emoji:'🥗', name:'Gỏi Cá Trích', desc:'Raw herring salad with coconut & herbs', search:'vietnamese' },
+        { emoji:'🍜', name:'Bún Quậy Phú Quốc', desc:'Stirred rice noodle with seafood — island original', search:'vietnamese' },
+        { emoji:'🦑', name:'Bạch Tuộc Nướng', desc:'Grilled octopus on the night market', search:'seafood' },
+      ]},
+    { keywords: ['buon ma thuot','buôn ma thuột','ban me thuot','dak lak','đắk lắk','daklak'],
+      city: 'Buôn Ma Thuột', country: 'Vietnam', flag: '🇻🇳',
+      foods: [
+        { emoji:'☕', name:'Cà Phê Buôn Ma Thuột', desc:'World-class Robusta & Arabica from the source', search:'cafe brunch' },
+        { emoji:'🥩', name:'Bò Nướng Lá Lốt', desc:'Grilled beef in wild betel leaves', search:'vietnamese' },
+        { emoji:'🍖', name:'Cơm Lam Tây Nguyên', desc:'Central Highlands bamboo sticky rice', search:'vietnamese' },
+        { emoji:'🐖', name:'Lợn Rừng Nướng', desc:'Wild boar grilled over open fire', search:'vietnamese' },
+        { emoji:'🌿', name:'Canh Thụt', desc:'M\'nông tribal smoked fish & bamboo shoot soup', search:'vietnamese' },
+        { emoji:'🍯', name:'Rượu Cần', desc:'Communal fermented rice wine drunk through bamboo straws', search:'vietnamese' },
+      ]},
+    { keywords: ['tokyo','東京'],
+      city: 'Tokyo', country: 'Japan', flag: '🇯🇵',
+      foods: [
+        { emoji:'🍣', name:'Sushi & Sashimi', desc:'Freshest fish in the world', search:'sushi' },
+        { emoji:'🍜', name:'Ramen', desc:'Rich broth & springy noodles', search:'ramen' },
+        { emoji:'🍤', name:'Tempura', desc:'Light, crispy battered seafood', search:'tempura' },
+        { emoji:'🥩', name:'Wagyu Beef', desc:'Premium marbled beef', search:'japanese' },
+        { emoji:'🍱', name:'Bento & Izakaya', desc:'Bar snacks & small plates', search:'izakaya' },
+        { emoji:'🥢', name:'Yakitori', desc:'Charcoal-grilled chicken skewers', search:'yakitori' },
+      ]},
+    { keywords: ['osaka','大阪'],
+      city: 'Osaka', country: 'Japan', flag: '🇯🇵',
+      foods: [
+        { emoji:'🐙', name:'Takoyaki', desc:'Crispy octopus balls', search:'japanese' },
+        { emoji:'🥞', name:'Okonomiyaki', desc:'Savory Japanese pancake', search:'japanese' },
+        { emoji:'🍢', name:'Kushikatsu', desc:'Battered skewered meats', search:'japanese' },
+        { emoji:'🍜', name:'Osaka Ramen', desc:'Rich Osaka-style broth', search:'ramen' },
+      ]},
+    { keywords: ['kyoto','京都'],
+      city: 'Kyoto', country: 'Japan', flag: '🇯🇵',
+      foods: [
+        { emoji:'🍱', name:'Kaiseki', desc:'Multi-course refined cuisine', search:'japanese' },
+        { emoji:'🍵', name:'Matcha Sweets', desc:'Green tea cakes & desserts', search:'japanese' },
+        { emoji:'🍜', name:'Soba', desc:'Buckwheat noodles', search:'udon' },
+        { emoji:'🧆', name:'Tofu Cuisine', desc:'Delicate yudofu tofu', search:'japanese' },
+      ]},
+    { keywords: ['seoul','서울'],
+      city: 'Seoul', country: 'South Korea', flag: '🇰🇷',
+      foods: [
+        { emoji:'🥩', name:'Korean BBQ', desc:'Tabletop grilled meats', search:'korean bbq' },
+        { emoji:'🍚', name:'Bibimbap', desc:'Mixed rice bowl', search:'bibimbap' },
+        { emoji:'🌶️', name:'Tteokbokki', desc:'Spicy rice cakes', search:'tteokbokki' },
+        { emoji:'🍗', name:'Korean Fried Chicken', desc:'Double-fried crispy chicken', search:'korean fried chicken' },
+        { emoji:'🥘', name:'Sundubu Jjigae', desc:'Spicy soft tofu stew', search:'sundubu jjigae' },
+      ]},
+    { keywords: ['bangkok','กรุงเทพ'],
+      city: 'Bangkok', country: 'Thailand', flag: '🇹🇭',
+      foods: [
+        { emoji:'🍜', name:'Pad Thai', desc:'Iconic stir-fried noodles', search:'pad thai' },
+        { emoji:'🍲', name:'Tom Yum', desc:'Spicy lemongrass soup', search:'tom yum' },
+        { emoji:'🥭', name:'Mango Sticky Rice', desc:'Sweet coconut dessert', search:'mango sticky rice' },
+        { emoji:'🥗', name:'Som Tam', desc:'Green papaya salad', search:'som tam' },
+        { emoji:'🍛', name:'Green Curry', desc:'Coconut milk & Thai basil', search:'green curry' },
+      ]},
+    { keywords: ['chiang mai','เชียงใหม่'],
+      city: 'Chiang Mai', country: 'Thailand', flag: '🇹🇭',
+      foods: [
+        { emoji:'🍛', name:'Khao Soi', desc:'Northern curry noodle soup', search:'thai' },
+        { emoji:'🌭', name:'Sai Oua', desc:'Spiced northern sausage', search:'thai' },
+        { emoji:'🌶️', name:'Nam Prik Noom', desc:'Roasted chili dip', search:'thai' },
+      ]},
+    { keywords: ['beijing','北京','peking'],
+      city: 'Beijing', country: 'China', flag: '🇨🇳',
+      foods: [
+        { emoji:'🦆', name:'Peking Duck', desc:'Crispy lacquered duck', search:'peking duck' },
+        { emoji:'🥟', name:'Jiaozi', desc:'Traditional dumplings', search:'dumplings' },
+        { emoji:'🍜', name:'Zhajiangmian', desc:'Fermented soybean noodles', search:'chinese' },
+        { emoji:'🫕', name:'Mongolian Hot Pot', desc:'Simmered meats & veg', search:'hot pot' },
+      ]},
+    { keywords: ['shanghai','上海'],
+      city: 'Shanghai', country: 'China', flag: '🇨🇳',
+      foods: [
+        { emoji:'🥟', name:'Xiaolongbao', desc:'Soup dumplings', search:'dumplings' },
+        { emoji:'🥟', name:'Shengjianbao', desc:'Pan-fried pork buns', search:'dumplings' },
+        { emoji:'🦀', name:'Hairy Crab', desc:'Seasonal Shanghai delicacy', search:'seafood' },
+        { emoji:'🍖', name:'Red-braised Pork', desc:'Melt-in-mouth pork belly', search:'chinese' },
+      ]},
+    { keywords: ['hong kong','香港'],
+      city: 'Hong Kong', country: 'China', flag: '🇭🇰',
+      foods: [
+        { emoji:'🥟', name:'Dim Sum', desc:'Steamed & fried delicacies', search:'dim sum' },
+        { emoji:'🍗', name:'Roast Goose', desc:'Cantonese roasted goose', search:'char siu' },
+        { emoji:'🍜', name:'Wonton Noodles', desc:'Silky wontons in clear broth', search:'chinese' },
+        { emoji:'🥧', name:'Egg Tart', desc:'Buttery custard pastry', search:'chinese' },
+      ]},
+    { keywords: ['chengdu','成都'],
+      city: 'Chengdu', country: 'China', flag: '🇨🇳',
+      foods: [
+        { emoji:'🌶️', name:'Mapo Tofu', desc:'Numbing spicy tofu', search:'kung pao' },
+        { emoji:'🍜', name:'Dan Dan Noodles', desc:'Spicy sesame noodles', search:'chinese' },
+        { emoji:'🫕', name:'Sichuan Hot Pot', desc:'Numbing Sichuan broth', search:'hot pot' },
+        { emoji:'🥜', name:'Kung Pao Chicken', desc:'Classic Sichuan wok dish', search:'kung pao' },
+      ]},
+    { keywords: ['paris','île-de-france'],
+      city: 'Paris', country: 'France', flag: '🇫🇷',
+      foods: [
+        { emoji:'🥐', name:'Croissant', desc:'Flaky buttery pastry', search:'french' },
+        { emoji:'🐌', name:'Escargot', desc:'Garlic butter snails', search:'french' },
+        { emoji:'🥩', name:'Steak Frites', desc:'Classic steak & fries', search:'french' },
+        { emoji:'🍮', name:'Crème Brûlée', desc:'Caramelized custard', search:'french' },
+        { emoji:'🧅', name:'French Onion Soup', desc:'Slow-cooked onion broth', search:'french' },
+      ]},
+    { keywords: ['rome','roma'],
+      city: 'Rome', country: 'Italy', flag: '🇮🇹',
+      foods: [
+        { emoji:'🍝', name:'Cacio e Pepe', desc:'Cheese & pepper pasta', search:'pasta' },
+        { emoji:'🥓', name:'Carbonara', desc:'Egg, guanciale & pecorino', search:'pasta' },
+        { emoji:'🍕', name:'Pizza al Taglio', desc:'Roman-style square pizza', search:'pizza' },
+        { emoji:'🍨', name:'Gelato', desc:'Artisan Italian ice cream', search:'gelato' },
+      ]},
+    { keywords: ['naples','napoli'],
+      city: 'Naples', country: 'Italy', flag: '🇮🇹',
+      foods: [
+        { emoji:'🍕', name:'Pizza Napoletana', desc:'Original Neapolitan pizza', search:'pizza' },
+        { emoji:'🥐', name:'Sfogliatella', desc:'Crispy ricotta pastry', search:'italian' },
+        { emoji:'🍝', name:'Ragù Napoletano', desc:'Slow-cooked meat sauce', search:'pasta' },
+      ]},
+    { keywords: ['new york','nyc','new york city','manhattan'],
+      city: 'New York City', country: 'USA', flag: '🇺🇸',
+      foods: [
+        { emoji:'🍕', name:'NYC Pizza', desc:'Foldable giant slices', search:'pizza' },
+        { emoji:'🥯', name:'Bagels', desc:'Boiled & baked with lox', search:'american' },
+        { emoji:'🌭', name:'Hot Dogs', desc:'Dirty water dogs with mustard', search:'american' },
+        { emoji:'🥩', name:'Pastrami Sandwich', desc:'Piled high at Katz\'s Deli', search:'american' },
+        { emoji:'🍰', name:'NY Cheesecake', desc:'Dense & creamy classic', search:'american' },
+      ]},
+    { keywords: ['new orleans','nola'],
+      city: 'New Orleans', country: 'USA', flag: '🇺🇸',
+      foods: [
+        { emoji:'🍲', name:'Gumbo', desc:'Rich Cajun stew', search:'american' },
+        { emoji:'🍛', name:'Jambalaya', desc:'Spiced rice with meat', search:'american' },
+        { emoji:'🍩', name:'Beignets', desc:'Powdered sugar donuts', search:'american' },
+        { emoji:'🥖', name:'Po\'boy', desc:'Fried shrimp sub sandwich', search:'american' },
+      ]},
+    { keywords: ['chicago'],
+      city: 'Chicago', country: 'USA', flag: '🇺🇸',
+      foods: [
+        { emoji:'🍕', name:'Deep Dish Pizza', desc:'Thick cheese-packed pie', search:'pizza' },
+        { emoji:'🌭', name:'Chicago-Style Hot Dog', desc:'Never with ketchup!', search:'american' },
+        { emoji:'🥩', name:'Italian Beef', desc:'Slow-roasted dipped beef', search:'american' },
+      ]},
+    { keywords: ['los angeles','la','l.a.'],
+      city: 'Los Angeles', country: 'USA', flag: '🇺🇸',
+      foods: [
+        { emoji:'🌮', name:'Fish Tacos', desc:'Baja-style fresh tacos', search:'tacos' },
+        { emoji:'🍔', name:'In-N-Out Burger', desc:'West Coast burger legend', search:'burger' },
+        { emoji:'🥑', name:'Avocado Toast', desc:'Brunch institution', search:'american' },
+        { emoji:'🥩', name:'Korean BBQ', desc:'LA\'s signature food culture', search:'korean bbq' },
+      ]},
+    { keywords: ['san francisco','sf','bay area'],
+      city: 'San Francisco', country: 'USA', flag: '🇺🇸',
+      foods: [
+        { emoji:'🍞', name:'Sourdough', desc:'Famous tangy bread', search:'american' },
+        { emoji:'🦀', name:'Dungeness Crab', desc:'Bay Area seafood staple', search:'seafood' },
+        { emoji:'🌯', name:'Mission Burrito', desc:'Giant foil-wrapped burrito', search:'burritos' },
+        { emoji:'🍜', name:'Cioppino', desc:'Italian-American fisherman\'s stew', search:'seafood' },
+      ]},
+    { keywords: ['mumbai','bombay'],
+      city: 'Mumbai', country: 'India', flag: '🇮🇳',
+      foods: [
+        { emoji:'🍔', name:'Vada Pav', desc:'Mumbai\'s spicy potato burger', search:'chaat' },
+        { emoji:'🍞', name:'Pav Bhaji', desc:'Buttery bread with veggie mash', search:'chaat' },
+        { emoji:'🥗', name:'Bhel Puri', desc:'Puffed rice street snack', search:'chaat' },
+        { emoji:'🍢', name:'Kebabs', desc:'Seekh & boti kebabs', search:'tandoori' },
+      ]},
+    { keywords: ['delhi','new delhi'],
+      city: 'Delhi', country: 'India', flag: '🇮🇳',
+      foods: [
+        { emoji:'🍗', name:'Butter Chicken', desc:'Creamy tomato curry', search:'butter chicken' },
+        { emoji:'🍛', name:'Chole Bhature', desc:'Spiced chickpeas & fried bread', search:'indian' },
+        { emoji:'🫔', name:'Paranthe', desc:'Stuffed flatbreads', search:'indian' },
+        { emoji:'🍢', name:'Kebabs', desc:'Old Delhi-style seekh kebabs', search:'tandoori' },
+        { emoji:'🥗', name:'Chaat', desc:'Tangy sweet street food', search:'chaat' },
+      ]},
+    { keywords: ['singapore'],
+      city: 'Singapore', country: 'Singapore', flag: '🇸🇬',
+      foods: [
+        { emoji:'🍗', name:'Hainanese Chicken Rice', desc:'Singapore\'s national dish', search:'chinese' },
+        { emoji:'🍜', name:'Laksa', desc:'Spicy coconut noodle soup', search:'singaporean' },
+        { emoji:'🦀', name:'Chili Crab', desc:'Iconic sweet chili sauce crab', search:'seafood' },
+        { emoji:'🍢', name:'Satay', desc:'Grilled skewers with peanut sauce', search:'singaporean' },
+        { emoji:'🍝', name:'Char Kway Teow', desc:'Smoky stir-fried flat noodles', search:'chinese' },
+      ]},
+    { keywords: ['kuala lumpur','kl','malaysia'],
+      city: 'Kuala Lumpur', country: 'Malaysia', flag: '🇲🇾',
+      foods: [
+        { emoji:'🍚', name:'Nasi Lemak', desc:'Coconut rice & sambal', search:'malaysian' },
+        { emoji:'🥞', name:'Roti Canai', desc:'Flaky flatbread with curry', search:'indian' },
+        { emoji:'🍜', name:'Laksa', desc:'Spicy coconut noodle soup', search:'malaysian' },
+        { emoji:'🍛', name:'Nasi Kandar', desc:'Mixed curry rice', search:'indian' },
+      ]},
+    { keywords: ['istanbul','İstanbul'],
+      city: 'Istanbul', country: 'Turkey', flag: '🇹🇷',
+      foods: [
+        { emoji:'🌯', name:'Döner Kebab', desc:'Slow-roasted spiced meat', search:'shawarma' },
+        { emoji:'🍮', name:'Baklava', desc:'Honey & nut filled pastry', search:'mediterranean' },
+        { emoji:'🥙', name:'Meze', desc:'Small shared appetizer plates', search:'mediterranean' },
+        { emoji:'🐟', name:'Balık Ekmek', desc:'Grilled fish sandwich on the Bosphorus', search:'seafood' },
+      ]},
+    { keywords: ['barcelona'],
+      city: 'Barcelona', country: 'Spain', flag: '🇪🇸',
+      foods: [
+        { emoji:'🥘', name:'Paella', desc:'Saffron seafood rice', search:'mediterranean' },
+        { emoji:'🍞', name:'Pan con Tomate', desc:'Bread rubbed with fresh tomato', search:'mediterranean' },
+        { emoji:'🫕', name:'Tapas', desc:'Small shared Spanish plates', search:'mediterranean' },
+        { emoji:'🍮', name:'Crema Catalana', desc:'Catalan burned cream', search:'mediterranean' },
+      ]},
+    { keywords: ['marrakech','marrakesh','morocco'],
+      city: 'Marrakech', country: 'Morocco', flag: '🇲🇦',
+      foods: [
+        { emoji:'🍲', name:'Tagine', desc:'Slow-cooked stew in clay pot', search:'mediterranean' },
+        { emoji:'🍚', name:'Couscous', desc:'Steamed semolina with lamb', search:'mediterranean' },
+        { emoji:'🥧', name:'Bastilla', desc:'Sweet-savory pastry pie', search:'mediterranean' },
+        { emoji:'🫕', name:'Harira', desc:'Spiced tomato & lentil soup', search:'mediterranean' },
+      ]},
+    { keywords: ['lima','peru'],
+      city: 'Lima', country: 'Peru', flag: '🇵🇪',
+      foods: [
+        { emoji:'🐟', name:'Ceviche', desc:'Citrus-cured fresh fish', search:'seafood' },
+        { emoji:'🍛', name:'Lomo Saltado', desc:'Stir-fry beef with fries', search:'peruvian' },
+        { emoji:'🥘', name:'Aji de Gallina', desc:'Creamy yellow chili chicken', search:'peruvian' },
+        { emoji:'🍢', name:'Anticucho', desc:'Grilled beef heart skewers', search:'peruvian' },
+      ]},
+    { keywords: ['mexico city','ciudad de mexico','cdmx'],
+      city: 'Mexico City', country: 'Mexico', flag: '🇲🇽',
+      foods: [
+        { emoji:'🌮', name:'Tacos al Pastor', desc:'Spit-roasted pork tacos', search:'tacos' },
+        { emoji:'🫔', name:'Tamales', desc:'Steamed corn dough parcels', search:'tamales' },
+        { emoji:'🥣', name:'Chilaquiles', desc:'Fried tortillas in salsa', search:'mexican' },
+        { emoji:'🍮', name:'Churros', desc:'Fried dough with chocolate', search:'mexican' },
+      ]},
+    { keywords: ['buenos aires','argentina'],
+      city: 'Buenos Aires', country: 'Argentina', flag: '🇦🇷',
+      foods: [
+        { emoji:'🥩', name:'Asado', desc:'Argentine BBQ grill feast', search:'bbq ribs' },
+        { emoji:'🥟', name:'Empanadas', desc:'Baked stuffed pastry pockets', search:'argentinian' },
+        { emoji:'🥩', name:'Milanesa', desc:'Breaded & fried beef cutlet', search:'american' },
+        { emoji:'🍮', name:'Dulce de Leche', desc:'Caramel spread on everything', search:'argentinian' },
+      ]},
+  ];
+
+  // ── Destination Explorer Data ──
+  const destinationData = {
+    'Ho Chi Minh City': {
+      tagline: 'Street food capital of Southeast Asia',
+      foodCulture: 'A city that eats around the clock — best meals are on plastic stools at sidewalk stalls. French colonial influence meets centuries of Vietnamese tradition in every bowl.',
+      bestFor: ['Street Food', 'Noodle Soups', 'Bánh Mì', 'Coffee Culture', 'Night Markets'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Ben Thanh Market, District 1 (Central), District 3 (Cafes), Bui Vien (Street Food))',
+      tip: '🕐 Eat breakfast at 7am — that\'s when the pho and com tam stalls are freshest.'
+    },
+    'Hanoi': {
+      tagline: 'Home of phở — Vietnam\'s most revered dish',
+      foodCulture: 'More reserved than Saigon, Hanoi\'s food scene is tied to northern tradition. Dishes are subtler, less sweet, and deeply tied to ritual. Old Quarter alley stalls are legendary.',
+      bestFor: ['Phở', 'Bún Chả', 'Bia Hơi (Draft Beer)', 'Egg Coffee', 'Street Noodles'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Old Quarter (Hoàn Kiếm), Tây Hồ (West Lake), Đinh Liệt Street',
+      tip: '☕ Try cà phê trứng (egg coffee) — a Hanoi original you won\'t find elsewhere.'
+    },
+    'Hội An': {
+      tagline: 'A UNESCO town where every dish is unique to this street',
+      foodCulture: 'Tiny and walkable, Hội An punches above its weight. Dishes like Cao Lầu and White Rose dumplings can only be made authentically here due to unique local water and rice.',
+      bestFor: ['Cao Lầu', 'Bánh Mì Phượng', 'White Rose Dumplings', 'Cooking Classes'],
+      price: '$ Affordable', priceLevel: 1,
+      bestAreas: 'Ancient Town (Trần Phú St), Cẩm Nam Island, Night Market',
+      tip: '🥖 Bánh Mì Phượng is world-famous — arrive before 8am or queue with Anthony Bourdain fans.'
+    },
+    'Huế': {
+      tagline: 'Royal cuisine from Vietnam\'s imperial capital',
+      foodCulture: 'Once the seat of the Nguyễn Dynasty, Huế\'s cuisine is the most elaborate in Vietnam — dozens of small dishes, ornate presentation, and a fiery heat unique to the region.',
+      bestFor: ['Bún Bò Huế', 'Imperial Set Meals', 'Bánh Khoái', 'Vegetarian Buddhist Food'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Đông Ba Market, Vỹ Dạ Village, Citadel surroundings',
+      tip: '🌶️ Huế food is the spiciest in Vietnam — locals say the chili builds character.'
+    },
+    'Nha Trang': {
+      tagline: 'Beach city where grilled seafood meets the sea breeze',
+      foodCulture: 'Nha Trang is all about ultra-fresh seafood plucked from the South China Sea. Eat on the beach, pick your own lobster, and pair with ice-cold Bia Saigon.',
+      bestFor: ['Grilled Seafood', 'Bún Cá', 'Nem Nướng Ninh Hòa', 'Bánh Căn', 'Beach Dining'],
+      price: '$–$$ Affordable', priceLevel: 1,
+      bestAreas: 'Bãi Tiên Beach stalls, Nguyễn Thiện Thuật St, Dam Market',
+      tip: '🦞 Go to the seafood market at Vĩnh Lương in the morning — choose your fish, they cook it on the spot.'
+    },
+    'Đà Nẵng': {
+      tagline: 'Vietnam\'s beach city with bold Central Vietnamese flavours',
+      foodCulture: 'Đà Nẵng sits between Hội An and Huế, absorbing the best of both. The food is bolder and spicier than the south, with an emphasis on fresh seafood pulled straight from the South China Sea and hearty noodle soups from the Central highlands.',
+      bestFor: ['Mì Quảng', 'Fresh Seafood', 'Bánh Xèo', 'Street Food', 'Beach Dining'],
+      price: '$–$$ Affordable', priceLevel: 1,
+      bestAreas: 'Mỹ Khê Beach seafood strip, Hàn Market, Bạch Đằng riverside, Trần Phú St',
+      tip: '🏖️ Head to the beachfront restaurants after 5pm — fresh catch grilled to order with cold Larue beer is a Da Nang institution.'
+    },
+    'Quy Nhơn': {
+      tagline: 'Bình Định\'s hidden gem — pristine coast, bold Central flavours',
+      foodCulture: 'Quy Nhơn is one of Vietnam\'s best-kept secrets. The food sits squarely in the Central Vietnamese tradition — big flavours, fresh seafood, and street dishes that are almost unknown outside the province. The beachside seafood scene rivals Nha Trang at a fraction of the price.',
+      bestFor: ['Bún Chả Cá', 'Bánh Xèo Tôm Nhảy', 'Lobster', 'Nem Nướng', 'Bánh Ít Lá Gai'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Quy Nhơn Beach seafood strip, Đống Đa Market, Nguyễn Huệ Street, Ghềnh Ráng area',
+      tip: '🦞 Order tôm hùm bông (spiny lobster) right off the boats at Đống Đa Market — prices are a fraction of Nha Trang.'
+    },
+    'Thanh Hóa': {
+      tagline: 'North-Central Vietnam\'s underrated highland and coastal cuisine',
+      foodCulture: 'Thanh Hóa bridges northern and central Vietnamese cooking styles. Inland highland dishes like bamboo sticky rice and smoked buffalo meet coastal seafood. The province\'s nem chua (fermented sour pork) is shipped across the country.',
+      bestFor: ['Nem Chua', 'Cơm Lam', 'Cháo Lươn', 'Bánh Cuốn', 'Thịt Trâu Gác Bếp'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Thanh Hóa City centre market, Sầm Sơn Beach seafood stalls, Bến En area',
+      tip: '🥩 Nem chua Thanh Hóa is the best in Vietnam — buy a pack from a local market to eat with beer as a snack.'
+    },
+    'Hải Phòng': {
+      tagline: 'Vietnam\'s port city — home of the legendary crab noodle soup',
+      foodCulture: 'Hải Phòng is a working port city with a proud, unpretentious food scene. The local obsession is bánh đa cua — a thick brown noodle soup with sea crab that you won\'t find authentically outside the city. Seafood is sourced direct from the Gulf of Tonkin.',
+      bestFor: ['Bánh Đa Cua', 'Nem Cua Bể', 'Seafood', 'Bánh Mì Cay', 'Bún Cá'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Lê Lợi Market (street food), Cát Bà Island (seafood), Ngô Quyền District, Đổ Sơn Beach',
+      tip: '🦀 For authentic bánh đa cua, go to a local morning market stall — the tourist-facing restaurants are a watered-down version.'
+    },
+    'Cam Ranh': {
+      tagline: 'Pristine bay city where Vietnam\'s freshest lobsters land',
+      foodCulture: 'Cam Ranh sits on one of the world\'s most beautiful bays. The fishing fleet brings in some of the freshest lobster, squid and crab in Southeast Asia. Eating here means sitting by the water and picking from the day\'s catch. It\'s simpler and more affordable than nearby Nha Trang.',
+      bestFor: ['Fresh Lobster', 'Grilled Seafood', 'Bánh Căn', 'Bún Cá', 'Bay Dining'],
+      price: '$–$$ Affordable', priceLevel: 1,
+      bestAreas: 'Cam Ranh Bay seafood strip, Ba Ngòi fishing village, Airport road restaurants',
+      tip: '🦞 Buy live lobster directly from fishermen at Ba Ngòi pier in the early morning — take it to a nearby restaurant to cook it for a small fee.'
+    },
+    'Phan Thiết': {
+      tagline: 'Fish sauce capital of Vietnam, home of sizzling bò né',
+      foodCulture: 'Phan Thiết is world-famous for producing Vietnam\'s finest fish sauce (nước mắm). But it\'s also the birthplace of bò né — a sizzling cast-iron skillet of beef, eggs and pâté that has since spread across Vietnam. Paired with the nearby Mũi Né sand dunes, it\'s a unique culinary destination.',
+      bestFor: ['Bò Né', 'Bánh Canh Chả Cá', 'Mực Một Nắng', 'Bánh Căn', 'Nước Mắm'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Phan Thiết city centre, Mũi Né beach strip, Trần Hưng Đạo Street (bò né row)',
+      tip: '🥩 Bò né originated on Trần Hưng Đạo Street — order it with a strong cà phê sữa đá (iced milk coffee) for the perfect Phan Thiết breakfast.'
+    },
+    'Quảng Trị': {
+      tagline: 'Wartime history meets Central Vietnam\'s most honest home cooking',
+      foodCulture: 'Quảng Trị is one of Vietnam\'s most historically significant provinces — the DMZ, the Citadel of Quảng Trị, and countless war memorials draw visitors from around the world. The food is quintessential Central Vietnamese: bold, fermented, and built on simple ingredients. Tôm chua (fermented sour shrimp) is the province\'s most beloved condiment, eaten with thin-sliced pork belly and herbs.',
+      bestFor: ['Bún Hến', 'Bánh Ướt Thịt Nướng', 'Tôm Chua', 'Cháo Vạt Giường', 'Grilled Pork'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Đông Hà city market, Quảng Trị Town street stalls, Highway 1 roadside eateries',
+      tip: '🦐 Buy a jar of tôm chua at the local market — it\'s the most flavourful souvenir in Central Vietnam and costs almost nothing.'
+    },
+    'Long Xuyên': {
+      tagline: 'Mekong Delta river city — fermented fish, palm sugar & floating markets',
+      foodCulture: 'Long Xuyên is the capital of An Giang province, gateway to the Mekong Delta\'s heartland. The food is pure southern Vietnamese — heavy on freshwater fish, fermented mắm, and coconut-sweetened everything. Nearby Châu Đốc is the mắm capital of Vietnam, producing fermented fish paste and sauces that flavour the entire region.',
+      bestFor: ['Mắm Cá Lóc', 'Bún Cá Châu Đốc', 'Bánh Xèo', 'Chè Thốt Nốt', 'Floating Markets'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Long Xuyên Night Market, Châu Đốc town (30 min away), Mỹ Hòa Hưng island village',
+      tip: '🐟 Take a morning trip to Châu Đốc for mắm — the fermented fish market there is one of the most intense sensory experiences in the Mekong Delta.'
+    },
+    'Rạch Giá': {
+      tagline: 'Kiên Giang\'s coastal gateway — crab, seafood and the road to Phú Quốc',
+      foodCulture: 'Rạch Giá sits on the Gulf of Thailand coast and is the main jumping-off point for Phú Quốc island. But the city itself has a strong seafood scene — the Gulf delivers swimming crab, shrimp and mudfish daily. Bánh canh ghẹ (thick noodle soup with crab) is the city\'s most iconic dish.',
+      bestFor: ['Bánh Canh Ghẹ', 'Ghẹ Rang Muối', 'Bún Mắm', 'Gulf Seafood', 'Bánh Tằm Bì'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Rạch Giá Night Market, Nguyễn Trung Trực Street seafood row, Cảng Cá (fish port)',
+      tip: '🦀 Order bánh canh ghẹ at a street stall near the fish port for breakfast — the crabs come in overnight and the broth is made fresh at 5am.'
+    },
+    'Hà Tiên': {
+      tagline: 'Cambodia border town with Gulf seafood and a laid-back charm',
+      foodCulture: 'Hà Tiên is one of Vietnam\'s most atmospheric small towns — a quiet Gulf coast border crossing point surrounded by limestone hills, temples and the sea. The food is simple and extremely fresh: sea snails, mantis shrimp and jellyfish pulled from the Gulf, plus palm sugar drinks from the Cambodian border palms.',
+      bestFor: ['Ốc Hương', 'Tôm Tít Nướng', 'Gỏi Sứa', 'Nước Thốt Nốt', 'Border Seafood'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Hà Tiên Market seafood stalls, Tô Châu Beach eateries, Đông Hồ lakeside',
+      tip: '🌴 Drink nước thốt nốt (palm sugar juice) fresh from the roadside — it\'s cool, sweet and only exists this close to Cambodia.'
+    },
+    'Cà Mau': {
+      tagline: 'Vietnam\'s southernmost tip — the land of mud crabs and mangroves',
+      foodCulture: 'Cà Mau is the end of the road — Vietnam\'s southernmost province, where the Mekong Delta meets the sea in a vast network of mangrove forests. The mud crab (cua Cà Mau) is legendary across the country, fattened in the brackish mangrove waters and prized for its rich, creamy roe.',
+      bestFor: ['Cua Cà Mau (Mud Crab)', 'Tôm Khô', 'Cá Thòi Lòi', 'Bún Cá', 'Mangrove Seafood'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Cà Mau City Night Market, Cà Mau Cape eco-area restaurants, Năm Căn mangrove market',
+      tip: '🦀 Cua Cà Mau is best eaten steamed with ginger and lime — no sauce needed. The roe alone is worth the journey to the end of Vietnam.'
+    },
+    'Măng Đen': {
+      tagline: 'Vietnam\'s secret highland — cool forests, sturgeon and pristine nature',
+      foodCulture: 'Măng Đen is a highland eco-tourism zone in Kon Tum province at 1,200m altitude — often called "the second Đà Lạt" for its cool, misty forests and lakes. The food is highland tribal cuisine: sturgeon and salmon from cold clear lakes, wild boar, jungle greens and single-origin Arabica coffee grown in the cloud forests.',
+      bestFor: ['Cá Tầm Nướng', 'Wild Boar', 'Cơm Lam', 'Highland Coffee', 'Jungle Greens'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Măng Đen town lake restaurants, Đăk Long commune eco-lodges, forest roadside stalls',
+      tip: '🐟 Grilled sturgeon (cá tầm) beside a misty highland lake costs a fraction of what it does in the city — it\'s one of the best value meals in Vietnam.'
+    },
+    'Pleiku': {
+      tagline: 'Gia Lai\'s misty plateau — bò một nắng, gỏi lá and mountain coffee',
+      foodCulture: 'Pleiku sits on the Gia Lai plateau at 800m, wrapped in morning mist. The signature dish is bò một nắng (sun-dried beef) — thin-sliced beef dried for one day in the highland sun then stir-fried with lemongrass and ant eggs. Phở khô (dry pho) and gỏi lá (the extraordinary 50-leaf herb salad) are also distinctly from this highland province.',
+      bestFor: ['Bò Một Nắng', 'Phở Khô', 'Gỏi Lá', 'Highland Coffee', 'Cơm Lam'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Pleiku City Night Market, Hội Phú Ward street food, Biển Hồ (Volcano Lake) area',
+      tip: '🥩 Order bò một nắng with kiến vàng (fried golden ants) — it sounds unusual but the ants add a citrusy crunch that makes the dish uniquely Gia Lai.'
+    },
+    'Kon Tum': {
+      tagline: 'Bahnar tribal heartland — jungle herbs, jar wine and ancient cooking',
+      foodCulture: 'Kon Tum is the Central Highlands\' most traditional province, home to the Bahnar and Jarai peoples. The food revolves around jungle ingredients — wild herb platters (gỏi lá) with 40+ forest leaves, bamboo rice, charcoal pork, and rượu ghè (communal jar wine). It\'s one of the few places in Vietnam where indigenous highland cuisine remains largely unchanged.',
+      bestFor: ['Gỏi Lá', 'Phở Khô', 'Rượu Ghè', 'Cơm Lam', 'Grilled Tribal Pork'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Kon Tum Wooden Church area, Kon Tum Market, Đăk Bla riverside villages',
+      tip: '🌿 A full gỏi lá platter costs about 80,000 VND and comes with up to 40 different wild leaves — it\'s the most complex salad in Vietnam and you\'ll never find it outside the highlands.'
+    },
+    'Cần Thơ': {
+      tagline: 'The Mekong Delta\'s floating market food paradise',
+      foodCulture: 'Southern slow life on the river — Cần Thơ is the gateway to the Mekong Delta\'s bounty of fresh water fish, tropical fruit, and coconut-laced everything.',
+      bestFor: ['Mekong Seafood', 'Floating Markets', 'Lẩu Mắm', 'Tropical Fruit', 'Chè Desserts'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Cái Răng Floating Market (5am!), Ninh Kiều Wharf, Central Market',
+      tip: '🚤 Wake up at 4:30am for Cái Răng floating market — vendors sell breakfast from boats.'
+    },
+    'Đà Lạt': {
+      tagline: 'Vietnam\'s City of Eternal Spring — romance, strawberries & great coffee',
+      foodCulture: 'Đà Lạt sits at 1,500m in the Central Highlands, giving it a cool, misty climate unlike anywhere else in Vietnam. The French left behind a love of pastries and wine; the highlands supply the freshest vegetables, strawberries, and coffee in the country. Street food here is built for cold evenings — grilled corn, hot pot, and steaming crêpes.',
+      bestFor: ['Bánh Tráng Nướng', 'Lẩu Bò', 'Highland Coffee', 'Strawberry Desserts', 'Bánh Mì Xíu Mại'],
+      price: '$–$$ Affordable', priceLevel: 1,
+      bestAreas: 'Đà Lạt Night Market, Hoàng Diệu Street (café row), Phan Đình Phùng Street, Xuân Hương Lake',
+      tip: '☕ Visit a "cà phê chồn" (weasel coffee) farm on the outskirts — you\'ll taste the world\'s most unusual brew at source prices.'
+    },
+    'Vũng Tàu': {
+      tagline: 'Saigon\'s weekend beach escape — seafood, bánh khọt & sea air',
+      foodCulture: 'Just 2 hours from Ho Chi Minh City, Vũng Tàu is the favourite weekend getaway for Saigonese. The seafood is pulled from the South China Sea overnight, and the local bánh khọt (mini coconut prawn pancakes) are famous across southern Vietnam.',
+      bestFor: ['Bánh Khọt', 'Grilled Seafood', 'Kem Bơ (Avocado Ice Cream)', 'Bánh Canh', 'Beach Dining'],
+      price: '$–$$ Affordable', priceLevel: 1,
+      bestAreas: 'Front Beach (Bãi Trước) seafood strip, Thùy Vân Street, Back Beach (Bãi Sau), Phan Chu Trinh market',
+      tip: '🦐 Bánh khọt at Gánh Bánh Khọt Cô Ba on Nguyễn Trường Tộ Street is the most iconic version — arrive before noon or sell out.'
+    },
+    'Sapa': {
+      tagline: 'Vietnam\'s misty highlands — ethnic cuisine and terraced-field rice',
+      foodCulture: 'Sapa is home to H\'Mông, Dao, and Tày ethnic minorities whose cooking is entirely unlike the Vietnamese lowlands. Ingredients come from mountain forests and terraced fields. Market days in Bắc Hà draw tribal people from across the highlands to cook and trade.',
+      bestFor: ['Grilled Highland Pork', 'Cơm Lam', 'Salmon Hot Pot', 'Thắng Cố', 'Highland Tea'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Sapa Town Night Market, Bắc Hà Sunday Market, Love Waterfall area stalls',
+      tip: '🏔️ Order cá hồi (salmon) — Sapa\'s cold mountain streams produce surprisingly excellent salmon, served hot-pot style.'
+    },
+    'Hạ Long': {
+      tagline: 'UNESCO bay dining — the freshest seafood in Asia',
+      foodCulture: 'Eating in Hạ Long Bay means choosing your live seafood from tanks on fishing boats, then having it grilled dockside while karst islands rise around you. Chả mực (grilled squid cake) is the unmissable Quảng Ninh signature that locals are fiercely proud of.',
+      bestFor: ['Live Seafood', 'Grilled Oysters', 'Chả Mực', 'Mantis Shrimp', 'Bay Dining Cruise'],
+      price: '$–$$ Affordable', priceLevel: 2,
+      bestAreas: 'Hạ Long Night Market, Cột 5 Seafood Street, Hon Gai Harbour, Cái Rồng (Cat Ba ferry dock)',
+      tip: '🦪 Hàu (oysters) grilled with scallion oil cost about 5,000 VND each dockside — eat two dozen and call it dinner.'
+    },
+    'Ninh Bình': {
+      tagline: 'Dry Ha Long Bay — goat hot pot and crispy burnt rice',
+      foodCulture: 'Ninh Bình\'s landscape of limestone karsts and river rice paddies produces two iconic dishes: thịt dê (mountain goat — chargrilled, hot pot or stir-fried) and cơm cháy (the crispy burnt crust scraped from the bottom of a clay rice pot, topped with savoury pork). It\'s simple, ancient, and deeply satisfying.',
+      bestFor: ['Thịt Dê (Goat)', 'Cơm Cháy', 'Cá Rô Đầm', 'Nem Chua Yên Mạc', 'Rice Wine'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Hoa Lư Ancient Capital area restaurants, Trường Yên Village, Tam Cốc boat-dock eateries',
+      tip: '🐐 Order the dê tái chanh (goat tartare with lime and herbs) — it sounds extreme but it\'s one of the most refreshing dishes in northern Vietnam.'
+    },
+    'Phú Quốc': {
+      tagline: 'Vietnam\'s tropical island — lobster, fish sauce and sunset dinners',
+      foodCulture: 'Phú Quốc is Vietnam\'s largest island and its most popular resort destination. The island produces the country\'s most prized fish sauce (nước mắm Phú Quốc) and is surrounded by waters teeming with lobster, crab and octopus. The night market is one of the best seafood experiences in Southeast Asia.',
+      bestFor: ['Live Lobster', 'Gỏi Cá Trích', 'Bún Quậy', 'Fish Sauce Tasting', 'Night Market Seafood'],
+      price: '$–$$$ Wide Range', priceLevel: 2,
+      bestAreas: 'Dinh Cau Night Market, Long Beach seafood strip, Ham Ninh fishing village',
+      tip: '🦞 Ham Ninh fishing village has the freshest and cheapest seafood on the island — take a 20-min taxi from Duong Dong and eat where the fishermen eat.'
+    },
+    'Buôn Ma Thuột': {
+      tagline: 'Vietnam\'s coffee capital — where your morning cup begins',
+      foodCulture: 'Buôn Ma Thuột (Ban Mê) is the heart of the Central Highlands coffee belt, producing over 40% of Vietnam\'s coffee output. But beyond coffee, this is Ê Đê and M\'nông tribal territory — expect bold highland dishes, wild-caught ingredients and communal rice wine ceremonies.',
+      bestFor: ['Highland Coffee', 'Lợn Rừng (Wild Boar)', 'Cơm Lam', 'Rượu Cần (Rice Wine)', 'Bò Lá Lốt'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Buôn Ma Thuột Coffee Village, Kim Đồng Street (coffee row), Đắk Lắk Night Market',
+      tip: '☕ Visit a local coffee farm and buy direct — a 500g bag of premium Robusta costs less than a single espresso back home.'
+    },
+    'Tokyo': {
+      tagline: 'More Michelin stars than any city on Earth',
+      foodCulture: 'Tokyo\'s food obsession is unmatched. Every ramen shop, sushi counter and yakitori alley operates with chef-level precision. From 3am ramen to $400 omakase — it\'s all worth it.',
+      bestFor: ['Sushi & Sashimi', 'Ramen', 'Izakaya', 'Wagyu Beef', 'Convenience Store Food'],
+      price: '$$–$$$$ Wide Range', priceLevel: 3,
+      bestAreas: 'Shinjuku (Izakayas), Shibuya (Trendy), Tsukiji Market, Ginza (Fine Dining), Asakusa (Street Food)',
+      tip: '🏪 Don\'t skip 7-Eleven — Tokyo convenience store food is genuinely world-class.'
+    },
+    'Osaka': {
+      tagline: 'Japan\'s kitchen — where eating is a competitive sport',
+      foodCulture: 'Osaka has a concept called "kuidaore" — eat until you drop. It\'s cheaper, louder and more fun than Tokyo, and Osakans will argue they eat better.',
+      bestFor: ['Takoyaki', 'Okonomiyaki', 'Kushikatsu', 'Street Food', 'Ramen'],
+      price: '$$ Moderate', priceLevel: 2,
+      bestAreas: 'Dotonbori (Neon Street Food), Kuromon Market, Shinsekai (Old Osaka)',
+      tip: '🐙 Takoyaki from a street stall in Dotonbori — eat standing up, burn your tongue, repeat.'
+    },
+    'Kyoto': {
+      tagline: 'Refined, seasonal, spiritual — Japan\'s culinary soul',
+      foodCulture: 'Kyoto\'s kaiseki (multi-course cuisine) is Japan at its most artistic. Meals follow the seasons religiously. Buddhist shojin-ryori vegetarian cuisine is also a highlight.',
+      bestFor: ['Kaiseki', 'Matcha Sweets', 'Tofu Cuisine', 'Temple Vegetarian', 'Nishiki Market'],
+      price: '$$$–$$$$ Upscale', priceLevel: 3,
+      bestAreas: 'Nishiki Market ("Kyoto\'s Kitchen"), Gion (High-end), Fushimi Inari (Street Snacks)',
+      tip: '🍵 The best matcha in the world is in Uji, just 15 mins from Kyoto — worth the detour.'
+    },
+    'Seoul': {
+      tagline: 'From K-BBQ to street toast — Seoul eats loudly and late',
+      foodCulture: 'Seoul\'s food culture is tied to communal eating, fermentation, and extreme flavour — numbing, fiery, savory. Eating alone at a BBQ restaurant is a rite of passage.',
+      bestFor: ['Korean BBQ', 'Bibimbap', 'Tteokbokki', 'Fried Chicken', 'Street Toast'],
+      price: '$–$$$ Wide Range', priceLevel: 2,
+      bestAreas: 'Myeongdong (Street Food), Hongdae (Youth/Trendy), Gangnam (Upscale), Gwangjang Market',
+      tip: '🥓 KBBQ at midnight — most restaurants stay open to 2am. Order two rounds of pork belly.'
+    },
+    'Bangkok': {
+      tagline: 'Street food paradise — the world eats here',
+      foodCulture: 'Bangkok is the undisputed world capital of street food. Jay Fai earned a Michelin star cooking crab omelettes on a charcoal stove in an open kitchen. That\'s Bangkok.',
+      bestFor: ['Pad Thai', 'Tom Yum', 'Street Woks', 'Night Markets', 'Mango Sticky Rice'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Yaowarat (Chinatown), Chatuchak (Weekend Market), Silom, Khao San Road',
+      tip: '🌶️ Order "pet nit noi" (a little spicy) — Bangkok\'s "medium" is scorching by most standards.'
+    },
+    'Chiang Mai': {
+      tagline: 'Northern Thai cooking — smoky, herby and unique',
+      foodCulture: 'Chiang Mai\'s food is distinct from Bangkok — less sweet, more herbal, heavily influenced by Burmese and Yunnan cuisine. Night bazaar eating is a cultural ritual.',
+      bestFor: ['Khao Soi', 'Night Bazaar Grills', 'Sai Oua Sausage', 'Cooking Classes'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Sunday Walking Street, Chang Puak Night Market (best khao soi), Nimmanhaemin',
+      tip: '🍜 Khao Soi Khun Yai at Chang Puak market is legendary — arrive early or miss out.'
+    },
+    'Beijing': {
+      tagline: 'Imperial flavours from the heart of China',
+      foodCulture: 'Beijing food is hearty, savoury and tied to history. Peking Duck in its original form, Mongolian hot pot, and old hutong dumpling shops — it\'s a culinary museum.',
+      bestFor: ['Peking Duck', 'Jiaozi Dumplings', 'Hot Pot', 'Street Skewers', 'Zhajiangmian'],
+      price: '$$ Moderate', priceLevel: 2,
+      bestAreas: 'Wangfujing (Street Food), Nanluoguxiang (Trendy Hutong), Gui Jie "Ghost Street" (24hr restaurants)',
+      tip: '🦆 Book Da Dong or Quanjude 2 days ahead for authentic Peking Duck — walk-ins wait 2 hours.'
+    },
+    'Shanghai': {
+      tagline: 'Where Chinese tradition meets international ambition',
+      foodCulture: 'Shanghai blends all of China\'s regional cuisines plus world-class international dining. Xiaolongbao soup dumplings are the city\'s edible obsession.',
+      bestFor: ['Xiaolongbao', 'Shengjianbao', 'Hairy Crab (autumn)', 'Rooftop Dining', 'Night Markets'],
+      price: '$$–$$$ Moderate–Upscale', priceLevel: 2,
+      bestAreas: 'The Bund (Fine Dining), Xintiandi (Trendy), Yuyuan Old Town (Street Snacks), Jing\'an',
+      tip: '🥟 Din Tai Fung is famous globally — but locals prefer the hole-in-the-wall xiaolongbao shops in Jing\'an.'
+    },
+    'Hong Kong': {
+      tagline: 'Cantonese cuisine perfected over centuries',
+      foodCulture: 'Hong Kong\'s food obsession is encoded in its culture — "sik jo fan mei a?" (have you eaten?) is a common greeting. Dim sum from 6am and roast meats that have been perfected for decades.',
+      bestFor: ['Dim Sum', 'Roast Goose', 'Wonton Noodles', 'Egg Tarts', 'Cha Chaan Teng (Milk Tea Cafes)'],
+      price: '$$–$$$$ Moderate–Expensive', priceLevel: 2,
+      bestAreas: 'Mong Kok (Dai Pai Dong), Sham Shui Po (Local), Central (Upscale), Jordan (Roast Meats)',
+      tip: '🦆 Kam\'s Roast Goose in Wan Chai has a Michelin star and a queue — arrive 30 mins before opening.'
+    },
+    'Singapore': {
+      tagline: 'A multicultural hawker paradise with Michelin stars at $3',
+      foodCulture: 'Singapore\'s hawker centre culture — where you can eat Michelin-quality food for $3 — is UNESCO listed. Chinese, Malay, and Indian cuisines coexist and cross-pollinate perfectly.',
+      bestFor: ['Hainanese Chicken Rice', 'Laksa', 'Chilli Crab', 'Hawker Centres', 'Satay'],
+      price: '$–$$ Accessible', priceLevel: 2,
+      bestAreas: 'Maxwell Food Centre (Tian Tian Chicken Rice), Lau Pa Sat (Night Satay), Newton Circus, Chinatown Complex',
+      tip: '🍚 Tian Tian Chicken Rice at Maxwell – the most debated plate of food in Asia. Judge for yourself.'
+    },
+    'Paris': {
+      tagline: 'The city that invented modern cuisine — and still leads it',
+      foodCulture: 'Paris elevated food to art and politics. A croissant here is not just breakfast — it\'s architecture. Sit at a bistro, order a carafe of wine, and watch the world.',
+      bestFor: ['Croissants & Pastries', 'Bistro Classics', 'Cheese & Wine', 'Fine Dining', 'Baguettes'],
+      price: '$$–$$$$ Moderate–Expensive', priceLevel: 3,
+      bestAreas: 'Le Marais (Trendy), Saint-Germain (Classic), Montmartre (Local), Rue du Faubourg (Ethnic)',
+      tip: '🥐 Buy a croissant from a boulangerie with the "Artisan Boulanger" sign — it\'s made fresh on-site every morning.'
+    },
+    'Rome': {
+      tagline: 'Ancient city, ancient recipes — and they don\'t change for a reason',
+      foodCulture: 'Romans guard their food traditions fiercely. Carbonara has five ingredients and if you add cream, a Roman will find you. Simplicity and quality are the whole point.',
+      bestFor: ['Cacio e Pepe', 'Carbonara', 'Pizza al Taglio', 'Supplì (Fried Rice Balls)', 'Gelato'],
+      price: '$–$$$ Wide Range', priceLevel: 2,
+      bestAreas: 'Testaccio (Most Local), Trastevere (Lively), Campo de\' Fiori (Market), Prati (Near Vatican)',
+      tip: '🍝 Never order Alfredo — it\'s not Roman. Order cacio e pepe instead and understand pasta.'
+    },
+    'New York City': {
+      tagline: 'The world\'s most diverse food city, open 24/7',
+      foodCulture: 'New York is every cuisine in the world compressed into five boroughs. A $1 dollar slice at 2am and a $400 omakase at 8pm are both peak NYC experiences.',
+      bestFor: ['Pizza', 'Bagels & Lox', 'Pastrami Deli', 'Diverse Ethnic Food', 'Food Halls'],
+      price: '$$–$$$$ Moderate–Expensive', priceLevel: 3,
+      bestAreas: 'Flushing (Best Chinese/Asian), Williamsburg (Hipster Eats), Lower East Side (Deli), Hell\'s Kitchen (Global)',
+      tip: '🍕 Joe\'s Pizza on Carmine Street — $3.50, one slice, no options. Perfection.'
+    },
+    'Mumbai': {
+      tagline: 'India\'s most energetic street food city',
+      foodCulture: 'Mumbai never stops eating — every street corner has a vada pav wallah. The city\'s food is defined by snacking, spice, and eating standing up while the world rushes past.',
+      bestFor: ['Vada Pav', 'Pav Bhaji', 'Chaat', 'Kebabs', 'Tiffin Culture'],
+      price: '$ Very Affordable', priceLevel: 1,
+      bestAreas: 'Chowpatty Beach (Street Food), Mohammed Ali Road (Kebabs, Eid nights), Dharavi (Local), Juhu Beach',
+      tip: '🌶️ Bhel puri on Chowpatty Beach at sunset — this is the Mumbai experience in one snack.'
+    },
+    'Istanbul': {
+      tagline: 'Where East meets West on a plate — literally',
+      foodCulture: 'Istanbul straddles two continents and its food does too. Kebab culture is taken seriously here, meze spreads can last hours, and the Bosphorus ferry snack of grilled corn is unmissable.',
+      bestFor: ['Döner Kebab', 'Baklava', 'Meze', 'Balık Ekmek (Fish Sandwich)', 'Simit'],
+      price: '$–$$ Affordable', priceLevel: 2,
+      bestAreas: 'Karaköy (Trendiest), Eminönü (Waterfront Fish), Grand Bazaar Area, Beyoğlu (Nightlife)',
+      tip: '🐟 Buy a balık ekmek (mackerel sandwich) from a boat on the Galata Bridge — locals eat it leaning on the railing.'
+    },
+    'Barcelona': {
+      tagline: 'Tapas, seafood, and the joy of eating outdoors forever',
+      foodCulture: 'Barcelona is the anti-rush meal culture. Lunch from 2-4pm is sacred, dinner before 9pm is suspicious. The city lives on tapas bars, vermouth at noon, and La Boqueria market runs.',
+      bestFor: ['Tapas', 'Paella (go to Barceloneta)', 'Jamón Ibérico', 'Pintxos', 'Seafood'],
+      price: '$$–$$$ Moderate', priceLevel: 2,
+      bestAreas: 'El Born (Trendy Pintxos), Barceloneta (Seafood), Eixample (Upscale), La Boqueria Market',
+      tip: '🥘 Skip tourist paella near La Sagrada Família — head to Barceloneta or ask your hotel for a trusted spot.'
+    },
+  };
+
+  function detectLocationSpecialties(text) {
+    const panel = document.getElementById('specialtiesPanel');
+    const inner = document.getElementById('specialtiesInner');
+    if (!text || text.trim().length < 2) {
+      panel.style.display = 'none';
+      return;
+    }
+    const q = text.toLowerCase();
+    const match = locationSpecialties.find(loc =>
+      loc.keywords.some(k => q.includes(k))
+    );
+    if (!match) {
+      panel.style.display = 'none';
+      return;
+    }
+
+    const dest = destinationData[match.city];
+
+    // Build food chips
+    const chips = match.foods.map(f => `
+      <div class="spec-chip" onclick="selectSpecialty('${f.search}', '${f.name.replace(/'/g, '')}')">
+        <span class="spec-emoji">${f.emoji}</span>
+        <span>
+          <strong style="display:block;font-size:12px;">${f.name}</strong>
+          <span class="spec-desc">${f.desc}</span>
+        </span>
+      </div>`).join('');
+
+    // If we have rich destination data, show the full explorer card
+    if (dest) {
+      const badgeHtml = dest.bestFor.map(b => `<span class="dest-badge">${b}</span>`).join('');
+      inner.innerHTML = `
+        <div class="dest-header">
+          <div class="dest-flag-city">${match.flag} ${match.city}, ${match.country}</div>
+          <div class="dest-tagline">${dest.tagline}</div>
+          <div class="dest-badges">${badgeHtml}</div>
+        </div>
+        <div class="dest-culture">${dest.foodCulture}</div>
+        <div class="dest-info-grid">
+          <div class="dest-info-box">
+            <div class="dest-info-title">💰 Price Range</div>
+            <div class="dest-info-val">${dest.price}</div>
+          </div>
+          <div class="dest-info-box">
+            <div class="dest-info-title">📍 Best Food Areas</div>
+            <div class="dest-info-val">${dest.bestAreas}</div>
+          </div>
+          <div class="dest-info-box">
+            <div class="dest-info-title">💡 Local Tip</div>
+            <div class="dest-info-val">${dest.tip}</div>
+          </div>
+        </div>
+        <div class="spec-city-label">🍽️ Must-Try Dishes — tap to search</div>
+        <div class="spec-chips">${chips}</div>
+        <button class="dest-explore-btn" onclick="startSearch()">🔍 Find Restaurants in ${match.city}</button>`;
+    } else {
+      // Fallback: simple chips for cities without rich data
+      inner.innerHTML = `
+        <div class="spec-city-label">📍 ${match.city}, ${match.country} ${match.flag} — Local Specialties</div>
+        <div class="spec-chips">${chips}</div>`;
+    }
+
+    panel.style.display = 'block';
+  }
+
+  function selectSpecialty(searchValue, displayName) {
+    const sel = document.getElementById('categorySelect');
+    // Try to find exact match first
+    for (const opt of sel.options) {
+      if (opt.value === searchValue) {
+        sel.value = searchValue;
+        showFoodInfo(searchValue);
+        return;
+      }
+    }
+    // Fallback: set first option that contains the text
+    for (const opt of sel.options) {
+      if (opt.text.toLowerCase().includes(searchValue.toLowerCase())) {
+        sel.value = opt.value;
+        showFoodInfo(opt.value);
+        return;
+      }
+    }
+  }
+
+  // Load Google Maps after page is ready
+  window.addEventListener('load', () => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places&callback=initMap`;
+    script.onerror = () => {
+      document.getElementById('resultsPanel').innerHTML = `
+        <div style="padding:20px;color:#fff;font-size:13px;line-height:1.7">
+          <div style="font-size:16px;font-weight:800;color:#ff6b35;margin-bottom:12px">⚠️ Google Maps API Key Needed</div>
+          <p style="color:rgba(255,220,160,0.9);margin-bottom:14px">
+            The app needs a Google Maps API key to search for restaurants. Here's how to get one free in ~5 minutes:
+          </p>
+          <ol style="padding-left:18px;color:rgba(255,200,130,0.85);display:flex;flex-direction:column;gap:8px">
+            <li>Go to <a href="https://console.cloud.google.com" target="_blank" style="color:#f7931e">console.cloud.google.com</a></li>
+            <li>Create a new project (or select an existing one)</li>
+            <li>Go to <strong>APIs &amp; Services → Library</strong> and enable:
+              <ul style="margin-top:4px;padding-left:16px">
+                <li><strong>Maps JavaScript API</strong></li>
+                <li><strong>Places API</strong></li>
+              </ul>
+            </li>
+            <li>Go to <strong>Credentials → Create Credentials → API Key</strong></li>
+            <li>Copy your key (starts with <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:4px">AIzaSy…</code>)</li>
+            <li>Open <code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:4px">index.html</code> in a text editor and replace the key on the line:<br/>
+              <code style="background:rgba(255,255,255,0.08);padding:4px 8px;border-radius:4px;display:inline-block;margin-top:4px;color:#ffd080">const API_KEY = 'YOUR_KEY_HERE';</code>
+            </li>
+          </ol>
+          <p style="margin-top:14px;color:rgba(255,200,100,0.7);font-size:12px">
+            💡 Tip: In Google Cloud Console, restrict your key to <strong>HTTP referrers</strong> (your domain or <code>localhost</code>) to keep it secure.
+          </p>
+        </div>`;
+      document.getElementById('map').innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,200,100,0.5);font-size:14px;flex-direction:column;gap:8px"><span style="font-size:40px">🗺️</span>Map will appear here once API key is set</div>`;
+    };
+    document.head.appendChild(script);
+  });
+
+  // Register service worker only when served from a real host (not preview/local)
+  const isRealHost = location.protocol === 'https:' &&
+                     !location.hostname.includes('claudeusercontent.com');
+  if ('serviceWorker' in navigator && isRealHost) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('SW registered:', reg.scope))
+        .catch(err => console.log('SW error:', err));
+    });
+  }
+</script>
+
+<!-- ── ORDER MODAL ── -->
+<div class="order-overlay" id="orderOverlay" onclick="if(event.target===this)closeOrderModal()">
+  <div class="order-sheet" id="orderSheet">
+    <div class="order-handle"></div>
+    <!-- Restaurant being ordered from -->
+    <div class="order-rest-banner">
+      <div class="order-from-label">🛵 Ordering from</div>
+      <div class="order-rest-name" id="orderRestName"></div>
+      <div class="order-rest-meta" id="orderRestMeta"></div>
+    </div>
+    <!-- Delivery app choices -->
+    <div class="order-apps-label">Choose delivery app</div>
+    <div class="order-apps-list" id="orderAppsGrid"></div>
+    <div style="padding:0 14px">
+      <button class="order-cancel-btn" onclick="closeOrderModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LAUNCH BRIDGE ── -->
+<div class="launch-overlay" id="launchOverlay" onclick="if(event.target===this)closeLaunch()">
+  <div class="launch-card">
+    <div class="launch-app-logo" id="launchAppLogo">🛵</div>
+    <div class="launch-app-name" id="launchAppName"></div>
+    <div class="launch-opening">Opening delivery app…</div>
+    <div class="launch-divider"></div>
+    <div class="launch-search-lbl">Search for this restaurant</div>
+    <div class="launch-rest-name" id="launchRestName"></div>
+    <button class="launch-copy-btn" id="launchCopyBtn" onclick="copyRestName()">
+      📋 Copy name
+    </button>
+    <button class="launch-close-btn" onclick="closeLaunch()">Done</button>
+  </div>
+</div>
+
+</body>
+</html>
