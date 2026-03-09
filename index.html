@@ -202,8 +202,8 @@
     }
 
     .results-panel {
-      width: 420px;
-      min-width: 320px;
+      /* Full width by default — map is hidden until a card is clicked */
+      width: 100%;
       overflow-y: auto;
       background: rgba(10,8,30,0.48);
       backdrop-filter: blur(14px);
@@ -211,6 +211,12 @@
       border-right: 1px solid rgba(255,150,50,0.2);
       display: flex;
       flex-direction: column;
+      transition: width 0.25s ease;
+    }
+    /* When map is open, shrink results panel to sidebar */
+    .main-layout.map-open .results-panel {
+      width: 420px;
+      min-width: 320px;
     }
 
     .results-header {
@@ -424,8 +430,13 @@
     }
 
     #map {
+      /* Hidden by default on desktop — only shown when a card is clicked */
+      display: none;
       flex: 1;
       background: rgba(20,15,30,0.35);
+    }
+    .main-layout.map-open #map {
+      display: block;
     }
 
     .empty-state {
@@ -1145,6 +1156,37 @@
 
     /* Hide tab bar on desktop */
     .mobile-tabs { display: none; }
+
+    /* "Back to list" button rendered as a Google Maps custom control */
+    #mapBackBtn {
+      margin: 10px;
+      padding: 8px 16px;
+      background: rgba(8, 5, 20, 0.92);
+      color: rgba(255, 200, 120, 0.95);
+      border: 1px solid rgba(255, 150, 50, 0.5);
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      -webkit-tap-highlight-color: transparent;
+      display: none;
+    }
+
+    /* "Back to list" link inside the info window popup */
+    .iw-back-btn {
+      display: block;
+      margin-top: 10px;
+      padding: 7px 0 2px;
+      border-top: 1px solid rgba(0,0,0,0.12);
+      color: #1a73e8;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+    }
+    .iw-back-btn:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -1449,6 +1491,11 @@
 </div>
 
 <!-- Mobile bottom tab bar — only shown on narrow screens via CSS -->
+<!-- Floating back-to-list button — shown on mobile when map is open -->
+<button id="mapBackBtn" onclick="closeMapAndGoBack()">
+  ← Back to list
+</button>
+
 <div class="mobile-tabs" id="mobileTabs">
   <button class="tab-btn active" id="tabList" onclick="switchTab('list')">
     <span class="tab-icon">📋</span>List
@@ -1488,28 +1535,74 @@
   window.addEventListener('load', updateTopHeight);
 
   /* ── Mobile tab switcher ──────────────────────────────── */
-  function switchTab(tab) {
+  // ── Map open / close ────────────────────────────────────────────────────
+  // openMap()  — shows the map panel (desktop: alongside results; mobile: full screen)
+  // closeMap() — hides the map, returns to full-width results list
+
+  function openMap() {
+    const mainLayout  = document.querySelector('.main-layout');
+    const mapDiv      = document.getElementById('map');
     const resultsPanel = document.getElementById('resultsPanel');
+    const backBtn     = document.getElementById('mapBackBtn');
+    const tabMap      = document.getElementById('tabMap');
+    const tabList     = document.getElementById('tabList');
+
+    // Desktop: add map-open class so CSS shows the map panel
+    if (mainLayout) mainLayout.classList.add('map-open');
+
+    // Mobile: use tab-active classes for full-screen swap
+    if (window.innerWidth <= 700) {
+      mapDiv.classList.add('tab-active');
+      resultsPanel.classList.remove('tab-active');
+      if (tabMap)  tabMap.classList.add('active');
+      if (tabList) tabList.classList.remove('active');
+    }
+
+    // Show the back button (registered as a map control)
+    if (backBtn) backBtn.style.display = 'block';
+
+    // Repaint map tiles after becoming visible
+    if (typeof google !== 'undefined' && map) {
+      google.maps.event.trigger(map, 'resize');
+    }
+  }
+
+  function closeMap() {
+    const mainLayout   = document.querySelector('.main-layout');
     const mapDiv       = document.getElementById('map');
+    const resultsPanel = document.getElementById('resultsPanel');
+    const backBtn      = document.getElementById('mapBackBtn');
     const tabList      = document.getElementById('tabList');
     const tabMap       = document.getElementById('tabMap');
 
-    if (tab === 'list') {
-      resultsPanel.classList.add('tab-active');
-      mapDiv.classList.remove('tab-active');
-      tabList.classList.add('active');
-      tabMap.classList.remove('active');
-    } else {
-      mapDiv.classList.add('tab-active');
-      resultsPanel.classList.remove('tab-active');
-      tabMap.classList.add('active');
-      tabList.classList.remove('active');
-      // Trigger a resize so the map tiles repaint correctly after being hidden
-      if (typeof google !== 'undefined' && map) {
-        google.maps.event.trigger(map, 'resize');
-      }
-    }
+    // Close info window
+    if (infoWindow) infoWindow.close();
+
+    // Desktop: remove map-open so results panel returns to full width
+    if (mainLayout) mainLayout.classList.remove('map-open');
+
+    // Mobile: swap back to results tab
+    mapDiv.classList.remove('tab-active');
+    resultsPanel.classList.add('tab-active');
+    if (tabList) tabList.classList.add('active');
+    if (tabMap)  tabMap.classList.remove('active');
+
+    // Hide the back button
+    if (backBtn) backBtn.style.display = 'none';
+
+    // Scroll the active card into view
+    const activeCard = document.querySelector('.restaurant-card.active');
+    if (activeCard) activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+
+  // Kept for compatibility — tabs still call switchTab('list'/'map')
+  function switchTab(tab) {
+    if (tab === 'map') openMap();
+    else closeMap();
+  }
+
+  // Called by the back button and info window close link
+  function closeMapAndGoBack() { closeMap(); }
 
   function clearSearchTimeout() {
     if (searchTimeout) { clearTimeout(searchTimeout); searchTimeout = null; }
@@ -1705,6 +1798,17 @@
     geocoder = new google.maps.Geocoder();
     service = new google.maps.places.PlacesService(map);
     infoWindow = new google.maps.InfoWindow();
+
+    // When the user taps ✕ to close the info window, close the map entirely
+    infoWindow.addListener('closeclick', () => {
+      closeMap();
+    });
+
+    // Register the back button as a Google Maps control so it sits inside the map canvas
+    const backBtn = document.getElementById('mapBackBtn');
+    if (backBtn) {
+      map.controls[google.maps.ControlPosition.TOP_LEFT].push(backBtn);
+    }
     dbg('✅ Google Maps loaded — geocoder & Places service ready');
 
     // Allow pressing Enter to search
@@ -2225,8 +2329,8 @@
       return b.valueScore - a.valueScore; // default: value
     });
 
-    // On mobile, auto-switch to List tab when results arrive
-    if (window.innerWidth <= 700) switchTab('list');
+    // Always start on the list view when new results arrive (hides any open map)
+    closeMap();
 
     const panel = document.getElementById('resultsPanel');
     panel.innerHTML = '';
@@ -2438,8 +2542,8 @@
     const card = document.getElementById(`card-${place.place_id}`);
     if (card) card.classList.add('active');
 
-    // On mobile, tapping a card switches to Map tab so the pin is visible
-    if (window.innerWidth <= 700) switchTab('map');
+    // Open the map panel (desktop: alongside results; mobile: full-screen)
+    openMap();
 
     map.setCenter(place.geometry.location);
     map.setZoom(16);
@@ -2449,6 +2553,9 @@
       ? (place.opening_hours.open_now ? '🟢 Open now' : '🔴 Closed')
       : '';
     const mapsUrl = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+    const backLink = window.innerWidth <= 700
+      ? `<a class="iw-back-btn" onclick="closeMapAndGoBack()">← Back to list</a>`
+      : '';
     infoWindow.setContent(`
       <div class="info-window-content">
         <h4>#${rank} ${place.name}</h4>
@@ -2456,6 +2563,7 @@
         <p>⚡ Value Score: ${place.valueScore}</p>
         ${hours ? `<p>${hours}</p>` : ''}
         <p><a href="${mapsUrl}" target="_blank">📍 Open in Google Maps</a></p>
+        ${backLink}
       </div>`);
 
     const marker = markers.find(m => m.placeId === place.place_id);
